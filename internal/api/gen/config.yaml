@@ -1,0 +1,10 @@
+# oapi-codegen configuration (core 9): std-http server with strict handlers.
+package: gen
+output: api.gen.go
+generate:
+  models: true
+  std-http-server: true
+  strict-server: true
+  embedded-spec: true
+output-options:
+  skip-prune: true

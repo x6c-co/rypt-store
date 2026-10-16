@@ -1,0 +1,2075 @@
+openapi: 3.1.0
+info:
+  title: rypt-store API
+  version: 1.0.0
+  summary: Self-hosted secrets manager.
+  description: |
+    REST API of rypt-store. This document is the source of truth (core D19):
+    Go server stubs and the web client are generated from it.
+
+    Errors use RFC 9457 `application/problem+json` with a stable `code`
+    extension. Cookie-authenticated requests that change state must send
+    `X-Rypt-Store-Request: 1`. Every response carries `X-Request-Id`.
+
+    `/metrics` (Prometheus) is served on the separate `metrics.listen` address
+    and is not part of this document.
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: /
+security:
+  - session: []
+  - bearer: []
+
+tags:
+  - name: health
+  - name: setup
+  - name: auth
+  - name: me
+  - name: tenants
+  - name: projects
+  - name: audit
+  - name: instance
+  - name: secrets
+  - name: tokens
+
+paths:
+  /healthz:
+    get:
+      tags: [health]
+      operationId: getHealthz
+      summary: Liveness.
+      security: []
+      responses:
+        "200":
+          description: The process is alive.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+  /readyz:
+    get:
+      tags: [health]
+      operationId: getReadyz
+      summary: "Readiness: database and key provider reachability."
+      security: []
+      responses:
+        "200":
+          description: Ready.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+        "503":
+          description: Not ready.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+
+  # ---------------------------------------------------------------- setup
+  /api/v1/setup/status:
+    get:
+      tags: [setup]
+      operationId: getSetupStatus
+      security: []
+      responses:
+        "200":
+          description: Setup state and the read-only key settings shown by the wizard.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SetupStatus" }
+  /api/v1/setup/totp:
+    post:
+      tags: [setup]
+      operationId: beginSetupTotp
+      summary: Generate the admin's TOTP secret during setup.
+      description: Requires the setup token. The secret is returned to the wizard and sent back with the code in `POST /api/v1/setup`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [setup_token, email]
+              properties:
+                setup_token: { type: string }
+                email: { type: string, format: email }
+      responses:
+        "200":
+          description: A new TOTP secret.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TotpEnrollment" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/setup:
+    post:
+      tags: [setup]
+      operationId: completeSetup
+      summary: Complete first-run setup (core 10).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetupRequest" }
+      responses:
+        "201":
+          description: Setup complete; the admin is signed in.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SetupResult" }
+        default: { $ref: "#/components/responses/Problem" }
+
+  # ---------------------------------------------------------------- auth
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        "200":
+          description: Signed in, or a second factor or MFA enrollment is required.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResult" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/auth/mfa/totp:
+    post:
+      tags: [auth]
+      operationId: verifyTotp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+      responses:
+        "200":
+          description: The session is MFA-satisfied.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResult" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/auth/mfa/recovery:
+    post:
+      tags: [auth]
+      operationId: verifyRecoveryCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+      responses:
+        "200":
+          description: The session is MFA-satisfied; the code is used up.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResult" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/auth/mfa/webauthn/begin:
+    post:
+      tags: [auth]
+      operationId: beginWebauthnLogin
+      responses:
+        "200":
+          description: WebAuthn assertion options.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WebauthnOptions" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/auth/mfa/webauthn/finish:
+    post:
+      tags: [auth]
+      operationId: finishWebauthnLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [credential]
+              properties:
+                credential: { $ref: "#/components/schemas/JsonObject" }
+      responses:
+        "200":
+          description: The session is MFA-satisfied.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResult" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      responses:
+        "204": { description: Signed out. }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/auth/device:
+    post:
+      tags: [auth]
+      operationId: startDeviceAuth
+      summary: Start the CLI device flow (core 7.4).
+      security: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                client_name: { type: string, maxLength: 128 }
+      responses:
+        "200":
+          description: Device and user codes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceAuthStart" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/auth/device/token:
+    post:
+      tags: [auth]
+      operationId: pollDeviceToken
+      summary: Poll for the CLI session token.
+      description: |
+        Until the request is approved this returns 400 with code
+        `authorization_pending`, `slow_down`, `access_denied`, or `expired_token`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [device_code]
+              properties:
+                device_code: { type: string }
+      responses:
+        "200":
+          description: The CLI session token (`rsc_` prefix), shown once.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceToken" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/auth/device/requests/{user_code}:
+    get:
+      tags: [auth]
+      operationId: getDeviceAuth
+      summary: Show a pending device request to the approving browser.
+      parameters:
+        - { name: user_code, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The request.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceAuthRequest" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/auth/device/approve:
+    post:
+      tags: [auth]
+      operationId: approveDeviceAuth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_code, approve]
+              properties:
+                user_code: { type: string }
+                approve: { type: boolean }
+      responses:
+        "204": { description: Decided. }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/auth/password-reset:
+    post:
+      tags: [auth]
+      operationId: resetPassword
+      summary: Set a new password with a one-time reset link token (core 7.2).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, new_password]
+              properties:
+                token: { type: string }
+                new_password: { type: string }
+      responses:
+        "204": { description: Password changed; every session of the user is revoked. }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/auth/invitations/{token}:
+    get:
+      tags: [auth]
+      operationId: getInvitation
+      security: []
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The invitation.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvitationPreview" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/auth/invitations/{token}/accept:
+    post:
+      tags: [auth]
+      operationId: acceptInvitation
+      summary: Accept an invitation.
+      description: |
+        A new user sends a display name and password and is signed in. An
+        existing user must be signed in as the invited email and sends no body.
+      security: [{}, { session: [] }]
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                display_name: { type: string, maxLength: 128 }
+                password: { type: string }
+      responses:
+        "200":
+          description: Accepted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResult" }
+        default: { $ref: "#/components/responses/Problem" }
+
+  # ---------------------------------------------------------------- me
+  /api/v1/me:
+    get:
+      tags: [me]
+      operationId: getMe
+      responses:
+        "200":
+          description: The signed-in principal.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/me/password:
+    put:
+      tags: [me]
+      operationId: changePassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password]
+              properties:
+                current_password: { type: string }
+                new_password: { type: string }
+      responses:
+        "204": { description: Changed. }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/me/sessions:
+    get:
+      tags: [me]
+      operationId: listMySessions
+      responses:
+        "200":
+          description: The user's sessions.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sessions]
+                properties:
+                  sessions:
+                    type: array
+                    items: { $ref: "#/components/schemas/SessionInfo" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/me/sessions/{id}:
+    delete:
+      tags: [me]
+      operationId: revokeMySession
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: Revoked. }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/me/mfa/totp:
+    post:
+      tags: [me]
+      operationId: beginTotpEnrollment
+      responses:
+        "200":
+          description: A new pending TOTP secret.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TotpEnrollment" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      tags: [me]
+      operationId: removeTotp
+      responses:
+        "204": { description: Removed. }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/me/mfa/totp/confirm:
+    post:
+      tags: [me]
+      operationId: confirmTotpEnrollment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+      responses:
+        "200":
+          description: Enrolled. Recovery codes are returned at the first MFA enrollment.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MfaEnrolled" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/me/mfa/webauthn:
+    get:
+      tags: [me]
+      operationId: listPasskeys
+      responses:
+        "200":
+          description: Registered passkeys.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [passkeys]
+                properties:
+                  passkeys:
+                    type: array
+                    items: { $ref: "#/components/schemas/Passkey" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/me/mfa/webauthn/{id}:
+    delete:
+      tags: [me]
+      operationId: removePasskey
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: Removed. }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/me/mfa/webauthn/register/begin:
+    post:
+      tags: [me]
+      operationId: beginPasskeyRegistration
+      responses:
+        "200":
+          description: WebAuthn creation options.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WebauthnOptions" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/me/mfa/webauthn/register/finish:
+    post:
+      tags: [me]
+      operationId: finishPasskeyRegistration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, credential]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 64 }
+                credential: { $ref: "#/components/schemas/JsonObject" }
+      responses:
+        "200":
+          description: Registered. Recovery codes are returned at the first MFA enrollment.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MfaEnrolled" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/me/mfa/recovery-codes:
+    post:
+      tags: [me]
+      operationId: regenerateRecoveryCodes
+      responses:
+        "200":
+          description: Ten new recovery codes; the old ones stop working.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MfaEnrolled" }
+        default: { $ref: "#/components/responses/Problem" }
+
+  # ---------------------------------------------------------------- tenants
+  /api/v1/tenants:
+    get:
+      tags: [tenants]
+      operationId: listTenants
+      parameters:
+        - name: scope
+          in: query
+          description: "`all` lists every tenant (instance admins only)."
+          schema: { type: string, enum: [member, all], default: member }
+      responses:
+        "200":
+          description: Tenants.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tenants]
+                properties:
+                  tenants:
+                    type: array
+                    items: { $ref: "#/components/schemas/Tenant" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [tenants]
+      operationId: createTenant
+      summary: Create a tenant (instance admin). The creator becomes its owner.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 128 }
+                slug: { $ref: "#/components/schemas/Slug" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tenant" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/tenants/{tenant}:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+    get:
+      tags: [tenants]
+      operationId: getTenant
+      responses:
+        "200":
+          description: The tenant.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tenant" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/tenants/{tenant}/members:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+    get:
+      tags: [tenants]
+      operationId: listMembers
+      responses:
+        "200":
+          description: Members.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [members]
+                properties:
+                  members:
+                    type: array
+                    items: { $ref: "#/components/schemas/Member" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/tenants/{tenant}/members/{user}:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+      - { name: user, in: path, required: true, schema: { type: string } }
+    patch:
+      tags: [tenants]
+      operationId: updateMember
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role: { $ref: "#/components/schemas/Role" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Member" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      tags: [tenants]
+      operationId: removeMember
+      responses:
+        "204": { description: Removed. }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/tenants/{tenant}/members/{user}/password-reset:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+      - { name: user, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [tenants]
+      operationId: createMemberPasswordReset
+      summary: Generate a one-time password reset link (tenant owner), delivered out of band.
+      responses:
+        "201":
+          description: The link, shown once.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OneTimeLink" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/tenants/{tenant}/invitations:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+    get:
+      tags: [tenants]
+      operationId: listInvitations
+      responses:
+        "200":
+          description: Invitations.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [invitations]
+                properties:
+                  invitations:
+                    type: array
+                    items: { $ref: "#/components/schemas/Invitation" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [tenants]
+      operationId: createInvitation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email: { type: string, format: email }
+                role: { $ref: "#/components/schemas/Role" }
+      responses:
+        "201":
+          description: The invitation and its link, shown once. v1 sends no email.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [invitation, link]
+                properties:
+                  invitation: { $ref: "#/components/schemas/Invitation" }
+                  link: { $ref: "#/components/schemas/OneTimeLink" }
+        default: { $ref: "#/components/responses/Problem" }
+
+  # ---------------------------------------------------------------- projects
+  /api/v1/tenants/{tenant}/projects:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+    get:
+      tags: [projects]
+      operationId: listProjects
+      responses:
+        "200":
+          description: Projects.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [projects]
+                properties:
+                  projects:
+                    type: array
+                    items: { $ref: "#/components/schemas/Project" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [projects]
+      operationId: createProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 128 }
+                slug: { $ref: "#/components/schemas/Slug" }
+                key_mode: { $ref: "#/components/schemas/KeyMode" }
+      responses:
+        "201":
+          description: Created with environments dev, staging and prod.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/tenants/{tenant}/projects/{project}:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+      - $ref: "#/components/parameters/ProjectSlug"
+    get:
+      tags: [projects]
+      operationId: getProject
+      responses:
+        "200":
+          description: The project.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+        default: { $ref: "#/components/responses/Problem" }
+    patch:
+      tags: [projects]
+      operationId: updateProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, minLength: 1, maxLength: 128 }
+                slug: { $ref: "#/components/schemas/Slug" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      tags: [projects]
+      operationId: deleteProject
+      responses:
+        "204": { description: Deleted. }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/tenants/{tenant}/projects/{project}/key-mode:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+      - $ref: "#/components/parameters/ProjectSlug"
+    post:
+      tags: [projects]
+      operationId: changeProjectKeyMode
+      summary: Change a project's key mode through a re-wrap migration (core 5.7).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key_mode]
+              properties:
+                key_mode: { $ref: "#/components/schemas/KeyMode" }
+                dry_run: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Dry-run estimate.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MigrationEstimate" }
+        "202":
+          description: Migration started.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KeyMigration" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/tenants/{tenant}/projects/{project}/environments:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+      - $ref: "#/components/parameters/ProjectSlug"
+    get:
+      tags: [projects]
+      operationId: listEnvironments
+      responses:
+        "200":
+          description: Environments in display order.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [environments]
+                properties:
+                  environments:
+                    type: array
+                    items: { $ref: "#/components/schemas/Environment" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [projects]
+      operationId: createEnvironment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 64 }
+                slug: { $ref: "#/components/schemas/Slug" }
+                position: { type: integer }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Environment" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+      - $ref: "#/components/parameters/ProjectSlug"
+      - $ref: "#/components/parameters/EnvironmentSlug"
+    patch:
+      tags: [projects]
+      operationId: updateEnvironment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, minLength: 1, maxLength: 64 }
+                slug: { $ref: "#/components/schemas/Slug" }
+                position: { type: integer }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Environment" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      tags: [projects]
+      operationId: deleteEnvironment
+      summary: Delete an environment with all of its secrets.
+      responses:
+        "204": { description: Deleted. }
+        default: { $ref: "#/components/responses/Problem" }
+
+  # ---------------------------------------------------------------- audit
+  /api/v1/tenants/{tenant}/audit:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+    get:
+      tags: [audit]
+      operationId: listTenantAudit
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/AuditActor"
+        - $ref: "#/components/parameters/AuditAction"
+        - $ref: "#/components/parameters/AuditProject"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+      responses:
+        "200":
+          description: Events, newest first, with the chain head.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuditPage" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/tenants/{tenant}/audit/export:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+    get:
+      tags: [audit]
+      operationId: exportTenantAudit
+      parameters:
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+      responses:
+        "200":
+          description: JSON Lines, one event per line, oldest first, with prev_hash and hash.
+          content:
+            application/jsonl:
+              schema: { type: string }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/tenants/{tenant}/audit/verify:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+    get:
+      tags: [audit]
+      operationId: verifyTenantAudit
+      responses:
+        "200":
+          description: Verification result.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuditVerify" }
+        default: { $ref: "#/components/responses/Problem" }
+
+  # ---------------------------------------------------------------- instance
+  /api/v1/instance/settings:
+    get:
+      tags: [instance]
+      operationId: getInstanceSettings
+      responses:
+        "200":
+          description: Instance settings (read from the config file).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceSettings" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/instance/users:
+    get:
+      tags: [instance]
+      operationId: listInstanceUsers
+      responses:
+        "200":
+          description: Every user.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [users]
+                properties:
+                  users:
+                    type: array
+                    items: { $ref: "#/components/schemas/User" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/instance/users/{user}/password-reset:
+    parameters:
+      - { name: user, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [instance]
+      operationId: createUserPasswordReset
+      responses:
+        "201":
+          description: The link, shown once.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OneTimeLink" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/instance/audit:
+    get:
+      tags: [instance]
+      operationId: listInstanceAudit
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/AuditActor"
+        - $ref: "#/components/parameters/AuditAction"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+      responses:
+        "200":
+          description: Instance chain events, newest first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuditPage" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/instance/audit/export:
+    get:
+      tags: [instance]
+      operationId: exportInstanceAudit
+      parameters:
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+      responses:
+        "200":
+          description: JSON Lines.
+          content:
+            application/jsonl:
+              schema: { type: string }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/instance/audit/verify:
+    get:
+      tags: [instance]
+      operationId: verifyInstanceAudit
+      responses:
+        "200":
+          description: Verification result.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuditVerify" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/instance/keys:
+    get:
+      tags: [instance]
+      operationId: getInstanceKeys
+      summary: Provider, default mode, operation counts, cache stats.
+      responses:
+        "200":
+          description: Key service status.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceKeys" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/instance/keys/migrations:
+    get:
+      tags: [instance]
+      operationId: listKeyMigrations
+      responses:
+        "200":
+          description: Recent migrations, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [migrations]
+                properties:
+                  migrations:
+                    type: array
+                    items: { $ref: "#/components/schemas/KeyMigration" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [instance]
+      operationId: startKeyMigration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/KeyMigrationRequest" }
+      responses:
+        "200":
+          description: Dry-run estimate.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MigrationEstimate" }
+        "202":
+          description: Migration started.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KeyMigration" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/instance/keys/migrations/{id}:
+    get:
+      tags: [instance]
+      operationId: getKeyMigration
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The migration.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KeyMigration" }
+        default: { $ref: "#/components/responses/Problem" }
+
+  # ---------------------------------------------------------------- secrets (feature 01)
+  /api/v1/tenants/{tenant}/projects/{project}/compare:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+      - $ref: "#/components/parameters/ProjectSlug"
+    get:
+      tags: [secrets]
+      operationId: compareSecrets
+      summary: The Compare grid; contains no values and no MACs (feature 01 3.6).
+      responses:
+        "200":
+          description: One row per secret name.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompareGrid" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+      - $ref: "#/components/parameters/ProjectSlug"
+      - $ref: "#/components/parameters/EnvironmentSlug"
+    get:
+      tags: [secrets]
+      operationId: listSecrets
+      summary: Names, comments, versions and timestamps; no values.
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Secrets ordered by name.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [secrets, next_cursor]
+                properties:
+                  secrets:
+                    type: array
+                    items: { $ref: "#/components/schemas/Secret" }
+                  next_cursor: { type: [string, "null"] }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [secrets]
+      operationId: createSecret
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, value]
+              properties:
+                name: { $ref: "#/components/schemas/SecretName" }
+                value: { $ref: "#/components/schemas/SecretValue" }
+                comment: { $ref: "#/components/schemas/SecretComment" }
+      responses:
+        "201":
+          description: Created at version 1.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Secret" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+      - $ref: "#/components/parameters/ProjectSlug"
+      - $ref: "#/components/parameters/EnvironmentSlug"
+      - $ref: "#/components/parameters/SecretNamePath"
+    get:
+      tags: [secrets]
+      operationId: getSecret
+      summary: Read a secret's current value. Audited as secret.read.
+      responses:
+        "200":
+          description: The secret with its value. Sent with Cache-Control no-store.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SecretWithValue" }
+        default: { $ref: "#/components/responses/Problem" }
+    put:
+      tags: [secrets]
+      operationId: updateSecret
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          description: The expected current version, as the ETag value (feature 01 3.1).
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value: { $ref: "#/components/schemas/SecretValue" }
+                comment: { $ref: "#/components/schemas/SecretComment" }
+      responses:
+        "200":
+          description: Updated to a new version.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Secret" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      tags: [secrets]
+      operationId: deleteSecret
+      responses:
+        "204": { description: Soft-deleted; restorable until purged. }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+      - $ref: "#/components/parameters/ProjectSlug"
+      - $ref: "#/components/parameters/EnvironmentSlug"
+      - $ref: "#/components/parameters/SecretNamePath"
+    get:
+      tags: [secrets]
+      operationId: listSecretVersions
+      responses:
+        "200":
+          description: Versions, newest first, without values.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [versions]
+                properties:
+                  versions:
+                    type: array
+                    items: { $ref: "#/components/schemas/SecretVersion" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions/{version}:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+      - $ref: "#/components/parameters/ProjectSlug"
+      - $ref: "#/components/parameters/EnvironmentSlug"
+      - $ref: "#/components/parameters/SecretNamePath"
+      - { name: version, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    get:
+      tags: [secrets]
+      operationId: getSecretVersion
+      responses:
+        "200":
+          description: One version with its value. Audited as secret.read.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SecretVersionWithValue" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions/{version}/restore:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+      - $ref: "#/components/parameters/ProjectSlug"
+      - $ref: "#/components/parameters/EnvironmentSlug"
+      - $ref: "#/components/parameters/SecretNamePath"
+      - { name: version, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    post:
+      tags: [secrets]
+      operationId: restoreSecretVersion
+      responses:
+        "200":
+          description: The old value written as a new version.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Secret" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/deleted:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+      - $ref: "#/components/parameters/ProjectSlug"
+      - $ref: "#/components/parameters/EnvironmentSlug"
+    get:
+      tags: [secrets]
+      operationId: listDeletedSecrets
+      responses:
+        "200":
+          description: Recently deleted secrets.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [secrets]
+                properties:
+                  secrets:
+                    type: array
+                    items: { $ref: "#/components/schemas/DeletedSecret" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/deleted/{id}/restore:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+      - $ref: "#/components/parameters/ProjectSlug"
+      - $ref: "#/components/parameters/EnvironmentSlug"
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [secrets]
+      operationId: restoreDeletedSecret
+      responses:
+        "200":
+          description: Restored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Secret" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/import:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+      - $ref: "#/components/parameters/ProjectSlug"
+      - $ref: "#/components/parameters/EnvironmentSlug"
+    post:
+      tags: [secrets]
+      operationId: importSecrets
+      parameters:
+        - name: mode
+          in: query
+          schema: { type: string, enum: [skip_existing, overwrite], default: skip_existing }
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema: { type: string }
+      responses:
+        "200":
+          description: What changed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImportResult" }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/export:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+      - $ref: "#/components/parameters/ProjectSlug"
+      - $ref: "#/components/parameters/EnvironmentSlug"
+    get:
+      tags: [secrets]
+      operationId: exportSecrets
+      summary: Every current value. A bulk read (secret.read.bulk).
+      parameters:
+        - name: format
+          in: query
+          schema: { type: string, enum: [dotenv, json], default: dotenv }
+      responses:
+        "200":
+          description: The values.
+          content:
+            text/plain:
+              schema: { type: string }
+            application/json:
+              schema:
+                type: object
+                additionalProperties: { type: string }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/values:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+      - $ref: "#/components/parameters/ProjectSlug"
+      - $ref: "#/components/parameters/EnvironmentSlug"
+    get:
+      tags: [secrets]
+      operationId: getSecretValues
+      summary: Bulk read for CLI run and export; a JSON map of name to value.
+      responses:
+        "200":
+          description: The values.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [values]
+                properties:
+                  values:
+                    type: object
+                    additionalProperties: { type: string }
+        default: { $ref: "#/components/responses/Problem" }
+
+  # ---------------------------------------------------------------- tokens
+  /api/v1/tenants/{tenant}/projects/{project}/tokens:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+      - $ref: "#/components/parameters/ProjectSlug"
+    get:
+      tags: [tokens]
+      operationId: listServiceTokens
+      responses:
+        "200":
+          description: Service tokens, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tokens]
+                properties:
+                  tokens:
+                    type: array
+                    items: { $ref: "#/components/schemas/ServiceToken" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [tokens]
+      operationId: createServiceToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, environments, permission, expires_at]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 64 }
+                environments:
+                  type: array
+                  minItems: 1
+                  items: { type: string, description: Environment slug. }
+                permission: { $ref: "#/components/schemas/TokenPermission" }
+                expires_at: { type: string, format: date-time }
+      responses:
+        "201":
+          description: The token, with its secret shown once.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, secret]
+                properties:
+                  token: { $ref: "#/components/schemas/ServiceToken" }
+                  secret: { type: string, description: "The full token, rst_<id>_<secret>." }
+        default: { $ref: "#/components/responses/Problem" }
+  /api/v1/tenants/{tenant}/projects/{project}/tokens/{id}:
+    parameters:
+      - $ref: "#/components/parameters/TenantSlug"
+      - $ref: "#/components/parameters/ProjectSlug"
+      - { name: id, in: path, required: true, schema: { type: string } }
+    delete:
+      tags: [tokens]
+      operationId: revokeServiceToken
+      responses:
+        "204": { description: Revoked. }
+        default: { $ref: "#/components/responses/Problem" }
+
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: __Host-rypt_store_session
+    bearer:
+      type: http
+      scheme: bearer
+      description: A service token (`rst_`) or a CLI session token (`rsc_`).
+
+  parameters:
+    TenantSlug:
+      name: tenant
+      in: path
+      required: true
+      description: Tenant slug.
+      schema: { type: string }
+    ProjectSlug:
+      name: project
+      in: path
+      required: true
+      description: Project slug.
+      schema: { type: string }
+    EnvironmentSlug:
+      name: environment
+      in: path
+      required: true
+      description: Environment slug.
+      schema: { type: string }
+    SecretNamePath:
+      name: name
+      in: path
+      required: true
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 500, default: 50 }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+    AuditActor:
+      name: actor
+      in: query
+      description: Actor ID.
+      schema: { type: string }
+    AuditAction:
+      name: action
+      in: query
+      description: Action prefix, e.g. `secret.` or `auth.login`.
+      schema: { type: string }
+    AuditProject:
+      name: project
+      in: query
+      description: Project slug.
+      schema: { type: string }
+    From:
+      name: from
+      in: query
+      schema: { type: string, format: date-time }
+    To:
+      name: to
+      in: query
+      schema: { type: string, format: date-time }
+
+  headers:
+    ETag:
+      description: The secret's current version, quoted.
+      schema: { type: string }
+
+  responses:
+    Problem:
+      description: An error (RFC 9457).
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        code:
+          type: string
+          description: |
+            Stable error code: not_found, forbidden, unauthorized, validation_failed,
+            conflict, key_provider_unavailable, key_provider_quota, mfa_required,
+            mfa_enrollment_required, setup_required, rate_limited, authorization_pending,
+            slow_down, access_denied, expired_token, invalid_credentials, internal.
+        request_id: { type: string }
+        errors:
+          type: array
+          items: { $ref: "#/components/schemas/FieldError" }
+    FieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field: { type: string }
+        message: { type: string }
+    JsonObject:
+      type: object
+      additionalProperties: true
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [ok, unavailable] }
+        database: { type: string }
+        provider: { type: string }
+    Slug:
+      type: string
+      pattern: "^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$"
+    Role:
+      type: string
+      enum: [owner, admin, member, viewer]
+    KeyMode:
+      type: string
+      enum: [A, B, C]
+    TokenPermission:
+      type: string
+      enum: [read, read_write]
+    SecretName:
+      type: string
+      pattern: "^[A-Za-z_][A-Za-z0-9_]{0,255}$"
+    SecretValue:
+      type: string
+      maxLength: 65536
+      description: UTF-8 text, multi-line allowed, at most 64 KiB. Empty is allowed.
+    SecretComment:
+      type: string
+      maxLength: 1024
+      description: Plaintext note. Comments are not encrypted.
+
+    SetupStatus:
+      type: object
+      required: [setup_required, provider, default_key_mode, require_mfa, tls_mode]
+      properties:
+        setup_required: { type: boolean }
+        provider: { type: string }
+        default_key_mode: { $ref: "#/components/schemas/KeyMode" }
+        require_mfa: { type: boolean }
+        tls_mode: { type: string }
+    SetupRequest:
+      type: object
+      required: [setup_token, email, display_name, password, organization]
+      properties:
+        setup_token: { type: string }
+        email: { type: string, format: email }
+        display_name: { type: string, minLength: 1, maxLength: 128 }
+        password: { type: string }
+        organization: { type: string, minLength: 1, maxLength: 128 }
+        totp_secret: { type: string, description: Required when MFA is required. }
+        totp_code: { type: string }
+    SetupResult:
+      type: object
+      required: [user, tenant, recovery_codes]
+      properties:
+        user: { $ref: "#/components/schemas/User" }
+        tenant: { $ref: "#/components/schemas/Tenant" }
+        recovery_codes:
+          type: array
+          items: { type: string }
+    TotpEnrollment:
+      type: object
+      required: [secret, otpauth_url]
+      properties:
+        secret: { type: string }
+        otpauth_url: { type: string }
+    MfaEnrolled:
+      type: object
+      required: [recovery_codes]
+      properties:
+        recovery_codes:
+          type: array
+          description: New recovery codes, shown once; empty when none were issued.
+          items: { type: string }
+    WebauthnOptions:
+      type: object
+      required: [options]
+      properties:
+        options: { $ref: "#/components/schemas/JsonObject" }
+    LoginResult:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok, mfa_required, mfa_enrollment_required]
+        mfa_methods:
+          type: array
+          items: { type: string, enum: [totp, webauthn, recovery_code] }
+        user: { $ref: "#/components/schemas/User" }
+    DeviceAuthStart:
+      type: object
+      required: [device_code, user_code, verification_uri, verification_uri_complete, expires_in, interval]
+      properties:
+        device_code: { type: string }
+        user_code: { type: string }
+        verification_uri: { type: string }
+        verification_uri_complete: { type: string }
+        expires_in: { type: integer }
+        interval: { type: integer }
+    DeviceAuthRequest:
+      type: object
+      required: [user_code, state, created_at, expires_at]
+      properties:
+        user_code: { type: string }
+        client_name: { type: string }
+        state: { type: string, enum: [pending, approved, denied, consumed] }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+    DeviceToken:
+      type: object
+      required: [access_token, token_type, expires_at]
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, enum: [Bearer] }
+        expires_at: { type: string, format: date-time }
+    OneTimeLink:
+      type: object
+      required: [token, url, expires_at]
+      properties:
+        token: { type: string }
+        url: { type: string }
+        expires_at: { type: string, format: date-time }
+    InvitationPreview:
+      type: object
+      required: [tenant_name, email, role, existing_user, expires_at]
+      properties:
+        tenant_name: { type: string }
+        email: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        existing_user: { type: boolean }
+        expires_at: { type: string, format: date-time }
+
+    User:
+      type: object
+      required: [id, email, display_name, is_instance_admin, created_at]
+      properties:
+        id: { type: string }
+        email: { type: string }
+        display_name: { type: string }
+        is_instance_admin: { type: boolean }
+        disabled: { type: boolean }
+        created_at: { type: string, format: date-time }
+    Me:
+      type: object
+      required: [principal_kind]
+      properties:
+        principal_kind: { type: string, enum: [user, service_token] }
+        user: { $ref: "#/components/schemas/User" }
+        tenants:
+          type: array
+          items: { $ref: "#/components/schemas/Tenant" }
+        mfa: { $ref: "#/components/schemas/MfaStatus" }
+        session: { $ref: "#/components/schemas/SessionInfo" }
+        token: { $ref: "#/components/schemas/TokenScope" }
+        notices: { $ref: "#/components/schemas/Notices" }
+    MfaStatus:
+      type: object
+      required: [totp, passkeys, recovery_codes_remaining, required]
+      properties:
+        totp: { type: boolean }
+        passkeys: { type: integer }
+        recovery_codes_remaining: { type: integer }
+        required: { type: boolean }
+    TokenScope:
+      type: object
+      required: [id, name, tenant, project, environments, permission, expires_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        tenant: { type: string, description: Tenant slug. }
+        project: { type: string, description: Project slug. }
+        environments:
+          type: array
+          items: { type: string }
+        permission: { $ref: "#/components/schemas/TokenPermission" }
+        expires_at: { type: string, format: date-time }
+    Notices:
+      type: object
+      required: [local_provider, self_signed_tls]
+      properties:
+        local_provider:
+          type: boolean
+          description: Keys are wrapped by the local KEK on this server's disk.
+        self_signed_tls: { type: boolean }
+        provider_unavailable: { type: boolean }
+        provider_quota: { $ref: "#/components/schemas/ProviderQuota" }
+    ProviderQuota:
+      type: object
+      description: The last quota (HTTP 429) error from the provider, reported for an hour.
+      required: [provider]
+      properties:
+        provider: { type: string }
+        code: { type: string }
+        cap: { type: integer, format: int64 }
+        resets_at: { type: string, format: date-time }
+        seen_at: { type: string, format: date-time }
+    SessionInfo:
+      type: object
+      required: [id, kind, created_at, last_seen_at, expires_at, current, mfa_satisfied]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [web, cli] }
+        created_at: { type: string, format: date-time }
+        last_seen_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        ip: { type: string }
+        user_agent: { type: string }
+        current: { type: boolean }
+        mfa_satisfied: { type: boolean }
+    Passkey:
+      type: object
+      required: [id, name, created_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        created_at: { type: string, format: date-time }
+        last_used_at: { type: [string, "null"], format: date-time }
+
+    Tenant:
+      type: object
+      required: [id, name, slug, created_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        created_at: { type: string, format: date-time }
+    Member:
+      type: object
+      required: [user_id, email, display_name, role, created_at]
+      properties:
+        user_id: { type: string }
+        email: { type: string }
+        display_name: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        created_at: { type: string, format: date-time }
+    Invitation:
+      type: object
+      required: [id, email, role, expires_at, created_at]
+      properties:
+        id: { type: string }
+        email: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        expires_at: { type: string, format: date-time }
+        accepted_at: { type: [string, "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+    Project:
+      type: object
+      required: [id, name, slug, key_mode, created_at, environments]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        key_mode: { $ref: "#/components/schemas/KeyMode" }
+        created_at: { type: string, format: date-time }
+        environments:
+          type: array
+          items: { $ref: "#/components/schemas/Environment" }
+    Environment:
+      type: object
+      required: [id, name, slug, position, created_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        position: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    AuditEvent:
+      type: object
+      required: [id, chain_id, seq, ts, actor_kind, action, result, metadata, prev_hash, hash]
+      properties:
+        id: { type: string }
+        chain_id: { type: string }
+        seq: { type: integer, format: int64 }
+        ts: { type: string }
+        actor_kind: { type: string, enum: [user, service_token, system] }
+        actor_id: { type: [string, "null"] }
+        actor_display: { type: [string, "null"], description: Display name or token label, resolved at read time. }
+        action: { type: string }
+        target_kind: { type: [string, "null"] }
+        target_id: { type: [string, "null"] }
+        project_id: { type: [string, "null"] }
+        environment_id: { type: [string, "null"] }
+        result: { type: string, enum: [success, denied, error] }
+        ip: { type: [string, "null"] }
+        user_agent: { type: [string, "null"] }
+        request_id: { type: [string, "null"] }
+        provider_request_id: { type: [string, "null"] }
+        metadata: { $ref: "#/components/schemas/JsonObject" }
+        prev_hash: { type: string }
+        hash: { type: string }
+    AuditHead:
+      type: object
+      required: [chain_id, seq, hash, anchor_seq, anchor_hash]
+      properties:
+        chain_id: { type: string }
+        seq: { type: integer, format: int64 }
+        hash: { type: string }
+        anchor_seq: { type: integer, format: int64 }
+        anchor_hash: { type: string }
+    AuditPage:
+      type: object
+      required: [events, next_cursor, head]
+      properties:
+        events:
+          type: array
+          items: { $ref: "#/components/schemas/AuditEvent" }
+        next_cursor: { type: [string, "null"] }
+        head: { $ref: "#/components/schemas/AuditHead" }
+    AuditVerify:
+      type: object
+      required: [ok, seq, hash, checked, head]
+      properties:
+        ok: { type: boolean }
+        seq: { type: integer, format: int64 }
+        hash: { type: string }
+        reason: { type: string }
+        checked: { type: integer, format: int64 }
+        head: { $ref: "#/components/schemas/AuditHead" }
+
+    InstanceSettings:
+      type: object
+      required: [instance_id, provider, providers, default_key_mode, outage_policy, require_mfa, tls_mode, versions_kept, audit_retention_days, public_url]
+      properties:
+        instance_id: { type: string }
+        provider: { type: string }
+        providers:
+          type: array
+          items: { type: string }
+        default_key_mode: { $ref: "#/components/schemas/KeyMode" }
+        outage_policy: { type: string, enum: [fail_closed, serve_cached] }
+        require_mfa: { type: boolean }
+        tls_mode: { type: string, enum: [acme, files, self_signed] }
+        tls_domains:
+          type: array
+          items: { type: string }
+        versions_kept: { type: integer }
+        audit_retention_days: { type: integer }
+        public_url: { type: string }
+        rypt_key_id: { type: string }
+    InstanceKeys:
+      type: object
+      required: [provider, default_key_mode, providers, month, op_counts, cache_entries, mode_costs]
+      properties:
+        provider: { type: string }
+        default_key_mode: { $ref: "#/components/schemas/KeyMode" }
+        providers:
+          type: array
+          items: { $ref: "#/components/schemas/ProviderInfo" }
+        month: { type: string, description: Current UTC month, YYYY-MM. }
+        op_counts:
+          type: array
+          items: { $ref: "#/components/schemas/OpCount" }
+        cache_entries: { type: integer }
+        quota: { $ref: "#/components/schemas/ProviderQuota" }
+        mode_costs:
+          type: array
+          description: Provider operations per read and write in each mode (feature 01 3.2).
+          items: { $ref: "#/components/schemas/ModeCost" }
+    ProviderInfo:
+      type: object
+      required: [name, loaded, unavailable, wraps]
+      properties:
+        name: { type: string }
+        loaded: { type: boolean }
+        unavailable: { type: boolean }
+        wraps: { type: integer, description: Active and retired wraps referencing this provider. }
+    OpCount:
+      type: object
+      required: [provider, op, count]
+      properties:
+        provider: { type: string }
+        op: { type: string }
+        count: { type: integer, format: int64 }
+    ModeCost:
+      type: object
+      required: [mode, chain, read_cost, write_cost]
+      properties:
+        mode: { $ref: "#/components/schemas/KeyMode" }
+        chain: { type: string }
+        read_cost: { type: string }
+        write_cost: { type: string }
+    KeyMigrationRequest:
+      type: object
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [provider, mode, rotate] }
+        params:
+          type: object
+          properties:
+            to: { type: string, description: "provider: the target provider." }
+            tenant: { type: string, description: "mode: tenant slug." }
+            project: { type: string, description: "mode: project slug." }
+            mode: { $ref: "#/components/schemas/KeyMode" }
+        dry_run: { type: boolean, default: false }
+    MigrationEstimate:
+      type: object
+      required: [kind, total_ops, projects]
+      properties:
+        kind: { type: string }
+        total_ops: { type: integer }
+        instance_ops: { type: integer, description: Operations on the instance and root keys. }
+        projects:
+          type: array
+          items: { $ref: "#/components/schemas/ProjectEstimate" }
+    ProjectEstimate:
+      type: object
+      required: [tenant, project, ops]
+      properties:
+        tenant: { type: string }
+        project: { type: string }
+        ops: { type: integer }
+    KeyMigration:
+      type: object
+      required: [id, kind, params, state, projects_total, projects_done, created_at, updated_at]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [provider, mode, rotate] }
+        params: { $ref: "#/components/schemas/JsonObject" }
+        state: { type: string, enum: [queued, running, succeeded, failed] }
+        projects_total: { type: integer }
+        projects_done: { type: integer }
+        error: { type: [string, "null"] }
+        started_by: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        finished_at: { type: [string, "null"], format: date-time }
+
+    Actor:
+      type: object
+      required: [kind, id]
+      properties:
+        kind: { type: string, enum: [user, service_token, system] }
+        id: { type: string }
+        display: { type: string }
+    Secret:
+      type: object
+      required: [id, name, comment, version, created_at, updated_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        comment: { type: string }
+        version: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        updated_by: { $ref: "#/components/schemas/Actor" }
+    SecretWithValue:
+      allOf:
+        - $ref: "#/components/schemas/Secret"
+        - type: object
+          required: [value]
+          properties:
+            value: { type: string }
+    SecretVersion:
+      type: object
+      required: [version, created_at, created_by]
+      properties:
+        version: { type: integer }
+        created_at: { type: string, format: date-time }
+        created_by: { $ref: "#/components/schemas/Actor" }
+        restored_from: { type: [integer, "null"] }
+        current: { type: boolean }
+    SecretVersionWithValue:
+      allOf:
+        - $ref: "#/components/schemas/SecretVersion"
+        - type: object
+          required: [value]
+          properties:
+            value: { type: string }
+    DeletedSecret:
+      type: object
+      required: [id, name, version, deleted_at, purge_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        version: { type: integer }
+        deleted_at: { type: string, format: date-time }
+        purge_at: { type: string, format: date-time }
+        name_in_use: { type: boolean, description: A live secret now uses the name, so restore would conflict. }
+    CompareGrid:
+      type: object
+      required: [environments, rows]
+      properties:
+        environments:
+          type: array
+          items: { $ref: "#/components/schemas/Environment" }
+        rows:
+          type: array
+          items: { $ref: "#/components/schemas/CompareRow" }
+    CompareRow:
+      type: object
+      required: [name, cells]
+      properties:
+        name: { type: string }
+        cells:
+          type: array
+          description: One cell per environment, in the order of `environments`.
+          items: { $ref: "#/components/schemas/CompareCell" }
+    CompareCell:
+      type: object
+      required: [environment, missing]
+      properties:
+        environment: { type: string, description: Environment slug. }
+        missing: { type: boolean }
+        group:
+          type: [integer, "null"]
+          description: Cells in the row with equal values share a group label; labels mean nothing outside the row.
+    ImportResult:
+      type: object
+      required: [created, updated, skipped, rejected]
+      properties:
+        created:
+          type: array
+          items: { type: string }
+        updated:
+          type: array
+          items: { type: string }
+        skipped:
+          type: array
+          items: { type: string }
+        rejected:
+          type: array
+          items: { $ref: "#/components/schemas/ImportRejection" }
+    ImportRejection:
+      type: object
+      required: [line, reason]
+      properties:
+        name: { type: string }
+        line: { type: integer }
+        reason: { type: string }
+    ServiceToken:
+      type: object
+      required: [id, name, prefix, permission, environments, expires_at, created_at, created_by]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        prefix: { type: string, description: The first 8 characters of the secret part. }
+        permission: { $ref: "#/components/schemas/TokenPermission" }
+        environments:
+          type: array
+          items: { type: string, description: Environment slug. }
+        expires_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        created_by: { type: string }
+        last_used_at: { type: [string, "null"], format: date-time }
+        revoked_at: { type: [string, "null"], format: date-time }
