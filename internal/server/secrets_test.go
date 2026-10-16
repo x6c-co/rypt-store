@@ -32,6 +32,22 @@ func newFixture(t *testing.T, o servertest.Options, mode string) *fixture {
 
 func (f *fixture) env(e string) string { return f.proj + "/environments/" + e + "/secrets" }
 
+// sec returns the path of the live secret named name in env, which
+// addresses it by ID.
+func (f *fixture) sec(t *testing.T, env, name string) string {
+	t.Helper()
+	var l struct {
+		Secrets []struct {
+			ID string `json:"id"`
+		}
+	}
+	f.c.Get(f.env(env)+"?name="+name).Must(t, 200).JSON(&l)
+	if len(l.Secrets) != 1 {
+		t.Fatalf("no live secret %s in %s", name, env)
+	}
+	return f.env(env) + "/" + l.Secrets[0].ID
+}
+
 func TestSecretLifecycle(t *testing.T) {
 	f := newFixture(t, servertest.Options{}, "")
 	c, dev := f.c, f.env("dev")
@@ -42,10 +58,25 @@ func TestSecretLifecycle(t *testing.T) {
 	}
 	c.Post(dev, map[string]any{"name": "DATABASE_URL", "value": "x"}).Must(t, 409)
 	c.Post(dev, map[string]any{"name": "bad-name", "value": "x"}).Must(t, 400)
-	c.Post(dev, map[string]any{"name": "values", "value": "x"}).Must(t, 400)
+	// Names are not in paths, so no name is reserved.
+	r = c.Post(dev, map[string]any{"name": "values", "value": "not reserved"}).Must(t, 201)
+	if v := c.Get(dev+"/"+r.Map()["id"].(string)).Must(t, 200).Map(); v["value"] != "not reserved" || v["name"] != "values" {
+		t.Fatalf("secret named values = %v", v)
+	}
+	// The name filter finds one secret or none; paths take only UUIDs; an ID
+	// from another environment is 404 here.
+	var found struct{ Secrets []map[string]any }
+	c.Get(dev+"?name=NOPE").Must(t, 200).JSON(&found)
+	if len(found.Secrets) != 0 {
+		t.Fatalf("filter for a missing name = %v", found)
+	}
+	c.Get(dev+"/DATABASE_URL").Must(t, 400)
+	prodID := c.Post(f.env("prod"), map[string]any{"name": "PROD_ONLY", "value": "p"}).Must(t, 201).Map()["id"].(string)
+	c.Get(dev+"/"+prodID).Must(t, 404)
+	c.Get(f.env("prod")+"/"+prodID).Must(t, 200)
 
 	// Read: value, ETag, no-store.
-	r = c.Get(dev+"/DATABASE_URL").Must(t, 200)
+	r = c.Get(f.sec(t, "dev", "DATABASE_URL")).Must(t, 200)
 	if r.Map()["value"] != "postgres://one" || r.Header.Get("ETag") != `"1"` || r.Header.Get("Cache-Control") != "no-store" {
 		t.Fatalf("read = %s %v", r.Body, r.Header)
 	}
@@ -53,18 +84,18 @@ func TestSecretLifecycle(t *testing.T) {
 		t.Fatalf("updated_by = %v", by)
 	}
 	// Update with the right and a stale If-Match.
-	c.Do("PUT", dev+"/DATABASE_URL", map[string]any{"value": "postgres://two"}, "If-Match", `"1"`).Must(t, 200)
-	if r := c.Do("PUT", dev+"/DATABASE_URL", map[string]any{"value": "postgres://stale"}, "If-Match", `"1"`); r.Status != 409 {
+	c.Do("PUT", f.sec(t, "dev", "DATABASE_URL"), map[string]any{"value": "postgres://two"}, "If-Match", `"1"`).Must(t, 200)
+	if r := c.Do("PUT", f.sec(t, "dev", "DATABASE_URL"), map[string]any{"value": "postgres://stale"}, "If-Match", `"1"`); r.Status != 409 {
 		t.Fatalf("stale If-Match: %d %s", r.Status, r.Body)
 	}
-	c.Do("PUT", dev+"/DATABASE_URL", map[string]any{"value": "x"}).Must(t, 400) // If-Match required
-	r = c.Do("PUT", dev+"/DATABASE_URL", map[string]any{"value": "postgres://three", "comment": "rotated"}, "If-Match", `"2"`).Must(t, 200)
+	c.Do("PUT", f.sec(t, "dev", "DATABASE_URL"), map[string]any{"value": "x"}).Must(t, 400) // If-Match required
+	r = c.Do("PUT", f.sec(t, "dev", "DATABASE_URL"), map[string]any{"value": "postgres://three", "comment": "rotated"}, "If-Match", `"2"`).Must(t, 200)
 	if r.Header.Get("ETag") != `"3"` || r.Map()["comment"] != "rotated" {
 		t.Fatalf("update = %s", r.Body)
 	}
 
 	// History has no values; an old version reads back; restore makes v4.
-	r = c.Get(dev+"/DATABASE_URL/versions").Must(t, 200)
+	r = c.Get(f.sec(t, "dev", "DATABASE_URL")+"/versions").Must(t, 200)
 	if strings.Contains(string(r.Body), "postgres://") {
 		t.Fatalf("history leaked values: %s", r.Body)
 	}
@@ -73,25 +104,26 @@ func TestSecretLifecycle(t *testing.T) {
 	if len(hist.Versions) != 3 || hist.Versions[0].Version != 3 {
 		t.Fatalf("history = %s", r.Body)
 	}
-	if v := c.Get(dev+"/DATABASE_URL/versions/1").Must(t, 200).Map(); v["value"] != "postgres://one" || v["current"] != false {
+	if v := c.Get(f.sec(t, "dev", "DATABASE_URL")+"/versions/1").Must(t, 200).Map(); v["value"] != "postgres://one" || v["current"] != false {
 		t.Fatalf("version 1 = %v", v)
 	}
-	c.Get(dev+"/DATABASE_URL/versions/9").Must(t, 404)
-	r = c.Post(dev+"/DATABASE_URL/versions/1/restore", nil).Must(t, 200)
+	c.Get(f.sec(t, "dev", "DATABASE_URL")+"/versions/9").Must(t, 404)
+	r = c.Post(f.sec(t, "dev", "DATABASE_URL")+"/versions/1/restore", nil).Must(t, 200)
 	if r.Header.Get("ETag") != `"4"` {
 		t.Fatalf("restore etag = %s", r.Header.Get("ETag"))
 	}
-	if v := c.Get(dev + "/DATABASE_URL").Map(); v["value"] != "postgres://one" {
+	if v := c.Get(f.sec(t, "dev", "DATABASE_URL")).Map(); v["value"] != "postgres://one" {
 		t.Fatalf("after restore = %v", v)
 	}
-	r = c.Get(dev+"/DATABASE_URL/versions").Must(t, 200)
+	r = c.Get(f.sec(t, "dev", "DATABASE_URL")+"/versions").Must(t, 200)
 	if !strings.Contains(string(r.Body), `"restored_from":1`) {
 		t.Fatalf("restored_from missing: %s", r.Body)
 	}
 
 	// Delete, recently deleted, name reuse, restore conflict, restore.
-	c.Delete(dev+"/DATABASE_URL").Must(t, 204)
-	c.Get(dev+"/DATABASE_URL").Must(t, 404)
+	orig := f.sec(t, "dev", "DATABASE_URL")
+	c.Delete(orig).Must(t, 204)
+	c.Get(orig).Must(t, 404)
 	var del struct {
 		Secrets []struct {
 			ID   string `json:"id"`
@@ -104,10 +136,14 @@ func TestSecretLifecycle(t *testing.T) {
 	}
 	c.Post(dev, map[string]any{"name": "DATABASE_URL", "value": "new"}).Must(t, 201)
 	c.Post(dev+"/deleted/"+del.Secrets[0].ID+"/restore", nil).Must(t, 409)
-	c.Delete(dev+"/DATABASE_URL").Must(t, 204)
+	c.Delete(f.sec(t, "dev", "DATABASE_URL")).Must(t, 204)
 	c.Post(dev+"/deleted/"+del.Secrets[0].ID+"/restore", nil).Must(t, 200)
-	if v := c.Get(dev + "/DATABASE_URL").Map(); v["value"] != "postgres://one" || v["version"] != float64(4) {
+	if v := c.Get(f.sec(t, "dev", "DATABASE_URL")).Map(); v["value"] != "postgres://one" || v["version"] != float64(4) {
 		t.Fatalf("restored = %v", v)
+	}
+	// Restoring keeps the secret's ID.
+	if f.sec(t, "dev", "DATABASE_URL") != orig {
+		t.Fatal("restored secret has a new ID")
 	}
 
 	// Every read and write is on the audit chain.
@@ -133,16 +169,16 @@ func TestPruning(t *testing.T) {
 	dev := f.env("dev")
 	f.c.Post(dev, map[string]any{"name": "K", "value": "v1"}).Must(t, 201)
 	for i := 2; i <= 4; i++ {
-		f.c.Do("PUT", dev+"/K", map[string]any{"value": "v" + string(rune('0'+i))}, "If-Match", `"`+string(rune('0'+i-1))+`"`).Must(t, 200)
+		f.c.Do("PUT", f.sec(t, "dev", "K"), map[string]any{"value": "v" + string(rune('0'+i))}, "If-Match", `"`+string(rune('0'+i-1))+`"`).Must(t, 200)
 	}
 	f.e.App.Jobs.RunOnce(context.Background())
 	var hist struct{ Versions []struct{ Version int } }
-	f.c.Get(dev+"/K/versions").Must(t, 200).JSON(&hist)
+	f.c.Get(f.sec(t, "dev", "K")+"/versions").Must(t, 200).JSON(&hist)
 	if len(hist.Versions) != 2 || hist.Versions[1].Version != 3 {
 		t.Fatalf("after prune = %+v", hist)
 	}
-	f.c.Get(dev+"/K/versions/1").Must(t, 404)
-	f.c.Get(dev+"/K/versions/3").Must(t, 200)
+	f.c.Get(f.sec(t, "dev", "K")+"/versions/1").Must(t, 404)
+	f.c.Get(f.sec(t, "dev", "K")+"/versions/3").Must(t, 200)
 	// The pruned versions' DEK wraps are gone too.
 	ctx := context.Background()
 	s, _ := f.e.Store.GetTenantBySlug(ctx, f.a.Tenant)
@@ -162,7 +198,7 @@ func TestPurge(t *testing.T) {
 	f := newFixture(t, servertest.Options{}, "")
 	dev := f.env("dev")
 	f.c.Post(dev, map[string]any{"name": "OLD", "value": "v"}).Must(t, 201)
-	f.c.Delete(dev+"/OLD").Must(t, 204)
+	f.c.Delete(f.sec(t, "dev", "OLD")).Must(t, 204)
 	// Purge runs with the real clock; move the deletion into the past.
 	ctx := context.Background()
 	ten, _ := f.e.Store.GetTenantBySlug(ctx, f.a.Tenant)
@@ -205,6 +241,7 @@ func TestCompare(t *testing.T) {
 				Environment string
 				Missing     bool
 				Group       *int
+				Secret      *string
 			}
 		}
 	}
@@ -213,6 +250,10 @@ func TestCompare(t *testing.T) {
 	for _, row := range grid.Rows {
 		var b strings.Builder
 		for _, cell := range row.Cells {
+			// Each present cell names the secret to open in that environment.
+			if (cell.Secret == nil) != cell.Missing || (cell.Secret != nil && f.sec(t, cell.Environment, row.Name) != f.env(cell.Environment)+"/"+*cell.Secret) {
+				t.Fatalf("%s/%s secret = %v", row.Name, cell.Environment, cell.Secret)
+			}
 			if cell.Missing {
 				b.WriteString("-")
 			} else {
@@ -326,15 +367,15 @@ func TestServiceTokenScope(t *testing.T) {
 	_, readTok := createToken(t, f, "ci", "read", []string{"prod"}, time.Now().Add(24*time.Hour))
 	tc := f.e.BearerClient(readTok)
 	// A read token reads prod and gets 404 for a write (acceptance 3).
-	if v := tc.Get(f.env("prod")+"/API_KEY").Must(t, 200).Map(); v["value"] != "prod-key" {
+	if v := tc.Get(f.sec(t, "prod", "API_KEY")).Must(t, 200).Map(); v["value"] != "prod-key" {
 		t.Fatalf("token read = %v", v)
 	}
 	tc.Get(f.env("prod")).Must(t, 200)
 	tc.Get(f.env("prod")+"/values").Must(t, 200)
-	tc.Do("PUT", f.env("prod")+"/API_KEY", map[string]any{"value": "x"}, "If-Match", `"1"`).Must(t, 404)
+	tc.Do("PUT", f.sec(t, "prod", "API_KEY"), map[string]any{"value": "x"}, "If-Match", `"1"`).Must(t, 404)
 	tc.Post(f.env("prod"), map[string]any{"name": "NEW", "value": "x"}).Must(t, 404)
 	// Wrong environment, wrong project, and non-secret paths are 404.
-	tc.Get(f.env("dev")+"/API_KEY").Must(t, 404)
+	tc.Get(f.sec(t, "dev", "API_KEY")).Must(t, 404)
 	tc.Get(other).Must(t, 404)
 	tc.Get(f.proj).Must(t, 404)
 	tc.Get(f.proj+"/compare").Must(t, 404)
@@ -348,15 +389,15 @@ func TestServiceTokenScope(t *testing.T) {
 
 	// A read_write token writes.
 	_, rwTok := createToken(t, f, "deploy", "read_write", []string{"dev"}, time.Now().Add(time.Hour))
-	f.e.BearerClient(rwTok).Do("PUT", f.env("dev")+"/API_KEY", map[string]any{"value": "rotated"}, "If-Match", `"1"`).Must(t, 200)
+	f.e.BearerClient(rwTok).Do("PUT", f.sec(t, "dev", "API_KEY"), map[string]any{"value": "rotated"}, "If-Match", `"1"`).Must(t, 200)
 
 	// Revoked and expired tokens are 401 and audited as token.denied.
 	revID, revTok := createToken(t, f, "temp", "read", []string{"prod"}, time.Now().Add(time.Hour))
 	f.c.Delete(f.proj+"/tokens/"+revID).Must(t, 204)
-	f.e.BearerClient(revTok).Get(f.env("prod")+"/API_KEY").Must(t, 401)
+	f.e.BearerClient(revTok).Get(f.sec(t, "prod", "API_KEY")).Must(t, 401)
 	_, expTok := createToken(t, f, "short", "read", []string{"prod"}, time.Now().Add(time.Minute))
 	f.e.Clock.Advance(2 * time.Minute)
-	f.e.BearerClient(expTok).Get(f.env("prod")+"/API_KEY").Must(t, 401)
+	f.e.BearerClient(expTok).Get(f.sec(t, "prod", "API_KEY")).Must(t, 401)
 	f.e.BearerClient(readTok[:len(readTok)-1]+"x").Get(f.env("prod")).Must(t, 401)
 	var page struct {
 		Events []struct{ Metadata map[string]any }
@@ -419,7 +460,7 @@ func TestModeCProviderCalls(t *testing.T) {
 		t.Fatalf("cold bulk read made %d provider calls, want 3", n)
 	}
 	before := f.e.Rypt.Total()
-	c2.Get(dev+"/A").Must(t, 200)
+	c2.Get(f.sec(t, "dev", "A")).Must(t, 200)
 	if n := f.e.Rypt.Total() - before; n != 0 {
 		t.Fatalf("warm single read made %d calls", n)
 	}
@@ -431,11 +472,11 @@ func TestModeCProviderCalls(t *testing.T) {
 	}})
 	c3 := e3.Login(f.a.Email, f.a.Password, f.a.TOTPSecret)
 	f.e.Rypt.Fail(f.e.Rypt.OutageError)
-	if r := c3.Get(dev + "/B"); r.Status != 503 || r.Code() != "key_provider_unavailable" {
+	if r := c3.Get(f.sec(t, "dev", "B")); r.Status != 503 || r.Code() != "key_provider_unavailable" {
 		t.Fatalf("outage: %d %s", r.Status, r.Body)
 	}
 	f.e.Rypt.Fail(f.e.Rypt.QuotaError)
-	if r := c3.Get(dev + "/C"); r.Status != 503 || r.Code() != "key_provider_quota" {
+	if r := c3.Get(f.sec(t, "dev", "C")); r.Status != 503 || r.Code() != "key_provider_quota" {
 		t.Fatalf("quota: %d %s", r.Status, r.Body)
 	}
 	f.e.Rypt.Fail(nil)

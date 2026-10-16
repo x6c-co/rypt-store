@@ -85,7 +85,9 @@ test("add, reveal, edit, history, restore, import, and compare", async ({ page }
   // No value ever reaches the grid.
   await expect(page.getByText("postgres://")).toHaveCount(0);
 
-  // Clicking a cell opens that environment with the secret highlighted.
+  // Clicking a cell opens that environment with the secret, by ID, highlighted.
   await page.getByRole("button", { name: "DATABASE_URL in prod has the same value as in dev" }).click();
-  await expect(page).toHaveURL(/\/e\/prod\?secret=DATABASE_URL/);
+  await expect(page).toHaveURL(/\/e\/prod\?secret=[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  await expect(page.locator("tr.highlight")).toHaveCount(1);
+  await expect(page.locator("tr.highlight")).toContainText("DATABASE_URL");
 });

@@ -21,11 +21,15 @@ function byteLength(s: string): number {
   return new TextEncoder().encode(s).length;
 }
 
-interface EditorTarget {
-  mode: "create" | "edit";
-  environment: string;
-  name?: string;
+/** A secret as the UI refers to it: by ID, with its name for display. */
+export interface SecretRef {
+  id: string;
+  name: string;
 }
+
+export type EditorTarget =
+  | { mode: "create"; environment: string; /** Prefills the name. */ name?: string }
+  | { mode: "edit"; environment: string; secret: SecretRef };
 
 /**
  * The secret editor dialog (feature 01 §6): a monospace multi-line value and
@@ -56,14 +60,14 @@ export function SecretEditor({
   const [error, setError] = useState<unknown>(null);
   const [stale, setStale] = useState(false);
 
-  const load = async (t: EditorTarget) => {
+  const load = async (t: Extract<EditorTarget, { mode: "edit" }>) => {
     setLoading(true);
     setError(null);
     setStale(false);
     try {
       const { data, response } = await callWithResponse(
-        api.GET("/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}", {
-          params: { path: { tenant, project, environment: t.environment, name: t.name! } },
+        api.GET("/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}", {
+          params: { path: { tenant, project, environment: t.environment, secret: t.secret.id } },
         }),
       );
       setValue(data.value);
@@ -79,7 +83,7 @@ export function SecretEditor({
   useEffect(() => {
     if (!target) return;
     setEnv(target.environment);
-    setName(target.name ?? "");
+    setName(target.mode === "create" ? (target.name ?? "") : target.secret.name);
     setValue("");
     setComment("");
     setVersion(null);
@@ -107,12 +111,12 @@ export function SecretEditor({
         toast.show(`Added ${name.trim()} to ${envName}.`);
       } else {
         await call(
-          api.PUT("/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}", {
-            params: { path: { tenant, project, environment: env, name: target.name! }, header: { "If-Match": etagFor(version ?? 0) } },
+          api.PUT("/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}", {
+            params: { path: { tenant, project, environment: env, secret: target.secret.id }, header: { "If-Match": etagFor(version ?? 0) } },
             body: { value, comment },
           }),
         );
-        toast.show(`Saved ${target.name}.`);
+        toast.show(`Saved ${target.secret.name}.`);
       }
       await qc.invalidateQueries({ queryKey: projectPrefix(tenant, project) });
       onClose();
@@ -131,7 +135,7 @@ export function SecretEditor({
       open={!!target}
       onOpenChange={(o) => !o && onClose()}
       wide
-      title={target?.mode === "edit" ? `Edit ${target.name}` : "Add secret"}
+      title={target?.mode === "edit" ? `Edit ${target.secret.name}` : "Add secret"}
       description={target?.mode === "edit" ? `In ${envName}. Saving creates a new version.` : undefined}
       footer={
         <>
@@ -166,7 +170,7 @@ export function SecretEditor({
                   title="Letters, digits and underscores; not starting with a digit."
                   autoComplete="off"
                   spellCheck={false}
-                  autoFocus={!target.name}
+                  autoFocus={!(target.mode === "create" && target.name)}
                   error={fieldErr("name")}
                 />
               </div>
@@ -189,14 +193,14 @@ export function SecretEditor({
             rows={6}
             spellCheck={false}
             autoComplete="off"
-            autoFocus={target?.mode === "edit" || !!target?.name}
+            autoFocus={target?.mode === "edit" || (target?.mode === "create" && !!target.name)}
             error={tooLong ? "Values are at most 64 KiB." : fieldErr("value")}
           />
           <TextField label="Comment" hint="Comments are not encrypted." value={comment} onChange={(e) => setComment(e.target.value)} maxLength={1024} error={fieldErr("comment")} />
           {stale && (
             <Notice tone="brass" role="alert">
-              Someone else saved a newer version of {target?.name} while you were editing.{" "}
-              <Button variant="link" onClick={() => target && load(target)}>
+              Someone else saved a newer version of {target?.mode === "edit" ? target.secret.name : ""} while you were editing.{" "}
+              <Button variant="link" onClick={() => target?.mode === "edit" && load(target)}>
                 Reload the newest version
               </Button>{" "}
               to edit it; your changes here will be replaced.
@@ -214,32 +218,33 @@ export function HistoryDrawer({
   tenant,
   project,
   environment,
-  name,
+  secret,
   canWrite,
   onClose,
 }: {
   tenant: string;
   project: string;
   environment: string;
-  name: string | null;
+  secret: SecretRef | null;
   canWrite: boolean;
   onClose(): void;
 }) {
   const qc = useQueryClient();
   const toast = useToast();
-  const versions = useVersions(tenant, project, environment, name);
+  const versions = useVersions(tenant, project, environment, secret?.id ?? null);
+  const name = secret?.name ?? "";
   const { revealed, reveal, hide, hideAll } = useReveal();
   const [restore, setRestore] = useState<number | null>(null);
   const [error, setError] = useState<unknown>(null);
 
-  useEffect(() => hideAll(), [name, hideAll]);
+  useEffect(() => hideAll(), [secret?.id, hideAll]);
 
   const revealVersion = async (v: number) => {
     setError(null);
     try {
       const res = await call(
-        api.GET("/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions/{version}", {
-          params: { path: { tenant, project, environment, name: name!, version: v } },
+        api.GET("/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions/{version}", {
+          params: { path: { tenant, project, environment, secret: secret!.id, version: v } },
         }),
       );
       reveal(String(v), res.value);
@@ -249,7 +254,7 @@ export function HistoryDrawer({
   };
 
   return (
-    <Modal drawer open={!!name} onOpenChange={(o) => !o && onClose()} title={`History of ${name ?? ""}`} description="Versions are listed newest first. Values are fetched only when revealed.">
+    <Modal drawer open={!!secret} onOpenChange={(o) => !o && onClose()} title={`History of ${name}`} description="Versions are listed newest first. Values are fetched only when revealed.">
       <ErrorNotice error={error} />
       {versions.isPending ? (
         <Loading />
@@ -307,8 +312,8 @@ export function HistoryDrawer({
         action={`Restore version ${restore}`}
         onConfirm={async () => {
           await call(
-            api.POST("/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions/{version}/restore", {
-              params: { path: { tenant, project, environment, name: name!, version: restore! } },
+            api.POST("/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions/{version}/restore", {
+              params: { path: { tenant, project, environment, secret: secret!.id, version: restore! } },
             }),
           );
           toast.show(`Restored version ${restore} of ${name}.`);

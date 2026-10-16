@@ -11,17 +11,17 @@ const grid: Schemas["CompareGrid"] = {
     {
       name: "DATABASE_URL",
       cells: [
-        { environment: "dev", missing: false, group: 1 },
-        { environment: "staging", missing: false, group: 1 },
-        { environment: "prod", missing: false, group: 2 },
+        { environment: "dev", missing: false, group: 1, secret: "DB-dev" },
+        { environment: "staging", missing: false, group: 1, secret: "DB-staging" },
+        { environment: "prod", missing: false, group: 2, secret: "DB-prod" },
       ],
     },
     {
       name: "STRIPE_KEY",
       cells: [
-        { environment: "dev", missing: false, group: 1 },
-        { environment: "staging", missing: false, group: 2 },
-        { environment: "prod", missing: true, group: null },
+        { environment: "dev", missing: false, group: 1, secret: "STRIPE-dev" },
+        { environment: "staging", missing: false, group: 2, secret: "STRIPE-staging" },
+        { environment: "prod", missing: true, group: null, secret: null },
       ],
     },
   ],
@@ -44,7 +44,8 @@ describe("CompareGrid", () => {
     const onAdd = vi.fn();
     render(<CompareGrid grid={grid} canWrite onOpen={onOpen} onAdd={onAdd} />);
     fireEvent.click(screen.getByRole("button", { name: "STRIPE_KEY in dev differs from every other environment" }));
-    expect(onOpen).toHaveBeenCalledWith("dev", "STRIPE_KEY");
+    // Cells open the secret by ID, not by name.
+    expect(onOpen).toHaveBeenCalledWith("dev", "STRIPE-dev");
     fireEvent.click(screen.getByRole("button", { name: /Add to prod/ }));
     expect(onAdd).toHaveBeenCalledWith("prod", "STRIPE_KEY");
   });

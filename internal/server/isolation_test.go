@@ -15,7 +15,8 @@ func TestTenantIsolation(t *testing.T) {
 	c.Post("/api/v1/tenants", map[string]any{"name": "Other"}).Must(t, 201)
 	other := "/api/v1/tenants/other"
 	c.Post(other+"/projects", map[string]any{"name": "Secret Project"}).Must(t, 201)
-	c.Post(other+"/projects/secret-project/environments/dev/secrets", map[string]any{"name": "KEY", "value": "v"})
+	key := c.Post(other+"/projects/secret-project/environments/dev/secrets", map[string]any{"name": "KEY", "value": "v"}).
+		Must(t, 201).Map()["id"].(string)
 	m, _ := invite(t, e, c, a.Tenant, "member@example.com", "owner")
 
 	p := other + "/projects/secret-project"
@@ -26,12 +27,21 @@ func TestTenantIsolation(t *testing.T) {
 		{"PATCH", p + "/environments/dev"}, {"DELETE", p + "/environments/dev"},
 		{"GET", other + "/audit"}, {"GET", other + "/audit/export"}, {"GET", other + "/audit/verify"},
 		{"GET", p + "/compare"}, {"GET", p + "/environments/dev/secrets"}, {"POST", p + "/environments/dev/secrets"},
-		{"GET", p + "/environments/dev/secrets/KEY"}, {"PUT", p + "/environments/dev/secrets/KEY"},
-		{"DELETE", p + "/environments/dev/secrets/KEY"}, {"GET", p + "/environments/dev/secrets/KEY/versions"},
-		{"GET", p + "/environments/dev/secrets/KEY/versions/1"}, {"POST", p + "/environments/dev/secrets/KEY/versions/1/restore"},
+		{"GET", p + "/environments/dev/secrets/" + key}, {"PUT", p + "/environments/dev/secrets/" + key},
+		{"DELETE", p + "/environments/dev/secrets/" + key}, {"GET", p + "/environments/dev/secrets/" + key + "/versions"},
+		{"GET", p + "/environments/dev/secrets/" + key + "/versions/1"}, {"POST", p + "/environments/dev/secrets/" + key + "/versions/1/restore"},
 		{"GET", p + "/environments/dev/secrets/deleted"}, {"POST", p + "/environments/dev/secrets/import"},
 		{"GET", p + "/environments/dev/secrets/export"}, {"GET", p + "/environments/dev/secrets/values"},
 		{"GET", p + "/tokens"}, {"POST", p + "/tokens"}, {"DELETE", p + "/tokens/0190a3c2-0000-7000-8000-000000000000"},
+	}
+	// The other tenant's secret ID under the member's own tenant and a
+	// project with the same slug is 404 too.
+	own := "/api/v1/tenants/" + a.Tenant + "/projects"
+	c.Post(own, map[string]any{"name": "Secret Project"}).Must(t, 201)
+	for _, m2 := range []string{"GET", "PUT", "DELETE"} {
+		if r := m.Do(m2, own+"/secret-project/environments/dev/secrets/"+key, map[string]any{"value": "x"}, "If-Match", `"1"`); r.Status != 404 {
+			t.Errorf("%s own path with a foreign secret ID: %d", m2, r.Status)
+		}
 	}
 	for _, x := range paths {
 		var body any

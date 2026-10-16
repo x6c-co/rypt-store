@@ -521,6 +521,9 @@ type CompareCell struct {
 	// Group Cells in the row with equal values share a group label; labels mean nothing outside the row.
 	Group   *int `json:"group,omitempty"`
 	Missing bool `json:"missing"`
+
+	// Secret The secret's ID in this environment; null when missing.
+	Secret *string `json:"secret,omitempty"`
 }
 
 // CompareGrid defines model for CompareGrid.
@@ -1071,8 +1074,8 @@ type Limit = int
 // ProjectSlug defines model for ProjectSlug.
 type ProjectSlug = string
 
-// SecretNamePath defines model for SecretNamePath.
-type SecretNamePath = string
+// SecretId defines model for SecretId.
+type SecretId = openapi_types.UUID
 
 // TenantSlug defines model for TenantSlug.
 type TenantSlug = string
@@ -1252,6 +1255,9 @@ type UpdateEnvironmentJSONBody struct {
 type ListSecretsParams struct {
 	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// Name Return only the live secret with exactly this name (zero or one item).
+	Name *string `form:"name,omitempty" json:"name,omitempty"`
 }
 
 // CreateSecretJSONBody defines parameters for CreateSecret.
@@ -1825,7 +1831,7 @@ type ClientInterface interface {
 	// Takes a body of the `application/json` content type.
 	UpdateEnvironment(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, body UpdateEnvironmentJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ListSecrets Names, comments, versions and timestamps; no values.
+	// ListSecrets IDs, names, comments, versions and timestamps; no values.
 	//
 	// Corresponds with GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets (the `ListSecrets` operationId).
 	ListSecrets(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, params *ListSecretsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1862,30 +1868,30 @@ type ClientInterface interface {
 	// Corresponds with GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/values (the `GetSecretValues` operationId).
 	GetSecretValues(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// DeleteSecret performs a DELETE /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name} (the `DeleteSecret` operationId) request.
-	DeleteSecret(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// DeleteSecret performs a DELETE /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret} (the `DeleteSecret` operationId) request.
+	DeleteSecret(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetSecret Read a secret's current value. Audited as secret.read.
 	//
-	// Corresponds with GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name} (the `GetSecret` operationId).
-	GetSecret(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Corresponds with GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret} (the `GetSecret` operationId).
+	GetSecret(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// UpdateSecretWithBody performs a PUT /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name} (the `UpdateSecret` operationId) request,
+	// UpdateSecretWithBody performs a PUT /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret} (the `UpdateSecret` operationId) request,
 	// with any type of body and a specified content type.
-	UpdateSecretWithBody(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, params *UpdateSecretParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	UpdateSecretWithBody(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, params *UpdateSecretParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// UpdateSecret performs a PUT /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name} (the `UpdateSecret` operationId) request.
+	// UpdateSecret performs a PUT /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret} (the `UpdateSecret` operationId) request.
 	// Takes a body of the `application/json` content type.
-	UpdateSecret(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, params *UpdateSecretParams, body UpdateSecretJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	UpdateSecret(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, params *UpdateSecretParams, body UpdateSecretJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ListSecretVersions performs a GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions (the `ListSecretVersions` operationId) request.
-	ListSecretVersions(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// ListSecretVersions performs a GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions (the `ListSecretVersions` operationId) request.
+	ListSecretVersions(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetSecretVersion performs a GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions/{version} (the `GetSecretVersion` operationId) request.
-	GetSecretVersion(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, version int, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// GetSecretVersion performs a GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions/{version} (the `GetSecretVersion` operationId) request.
+	GetSecretVersion(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, version int, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// RestoreSecretVersion performs a POST /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions/{version}/restore (the `RestoreSecretVersion` operationId) request.
-	RestoreSecretVersion(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, version int, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// RestoreSecretVersion performs a POST /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions/{version}/restore (the `RestoreSecretVersion` operationId) request.
+	RestoreSecretVersion(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, version int, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ChangeProjectKeyModeWithBody Change a project's key mode through a re-wrap migration (core 5.7).
 	//
@@ -3104,7 +3110,7 @@ func (c *Client) UpdateEnvironment(ctx context.Context, tenant TenantSlug, proje
 	return c.Client.Do(req)
 }
 
-// ListSecrets Names, comments, versions and timestamps; no values.
+// ListSecrets IDs, names, comments, versions and timestamps; no values.
 //
 // Corresponds with GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets (the `ListSecrets` operationId).
 func (c *Client) ListSecrets(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, params *ListSecretsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -3231,9 +3237,9 @@ func (c *Client) GetSecretValues(ctx context.Context, tenant TenantSlug, project
 	return c.Client.Do(req)
 }
 
-// DeleteSecret performs a DELETE /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name} (the `DeleteSecret` operationId) request.
-func (c *Client) DeleteSecret(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDeleteSecretRequest(c.Server, tenant, project, environment, name)
+// DeleteSecret performs a DELETE /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret} (the `DeleteSecret` operationId) request.
+func (c *Client) DeleteSecret(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteSecretRequest(c.Server, tenant, project, environment, secret)
 	if err != nil {
 		return nil, err
 	}
@@ -3246,9 +3252,9 @@ func (c *Client) DeleteSecret(ctx context.Context, tenant TenantSlug, project Pr
 
 // GetSecret Read a secret's current value. Audited as secret.read.
 //
-// Corresponds with GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name} (the `GetSecret` operationId).
-func (c *Client) GetSecret(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetSecretRequest(c.Server, tenant, project, environment, name)
+// Corresponds with GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret} (the `GetSecret` operationId).
+func (c *Client) GetSecret(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSecretRequest(c.Server, tenant, project, environment, secret)
 	if err != nil {
 		return nil, err
 	}
@@ -3259,10 +3265,10 @@ func (c *Client) GetSecret(ctx context.Context, tenant TenantSlug, project Proje
 	return c.Client.Do(req)
 }
 
-// UpdateSecretWithBody performs a PUT /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name} (the `UpdateSecret` operationId) request,
+// UpdateSecretWithBody performs a PUT /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret} (the `UpdateSecret` operationId) request,
 // with any type of body and a specified content type.
-func (c *Client) UpdateSecretWithBody(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, params *UpdateSecretParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewUpdateSecretRequestWithBody(c.Server, tenant, project, environment, name, params, contentType, body)
+func (c *Client) UpdateSecretWithBody(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, params *UpdateSecretParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateSecretRequestWithBody(c.Server, tenant, project, environment, secret, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3273,10 +3279,10 @@ func (c *Client) UpdateSecretWithBody(ctx context.Context, tenant TenantSlug, pr
 	return c.Client.Do(req)
 }
 
-// UpdateSecret performs a PUT /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name} (the `UpdateSecret` operationId) request.
+// UpdateSecret performs a PUT /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret} (the `UpdateSecret` operationId) request.
 // Takes a body of the `application/json` content type.
-func (c *Client) UpdateSecret(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, params *UpdateSecretParams, body UpdateSecretJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewUpdateSecretRequest(c.Server, tenant, project, environment, name, params, body)
+func (c *Client) UpdateSecret(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, params *UpdateSecretParams, body UpdateSecretJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateSecretRequest(c.Server, tenant, project, environment, secret, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3287,9 +3293,9 @@ func (c *Client) UpdateSecret(ctx context.Context, tenant TenantSlug, project Pr
 	return c.Client.Do(req)
 }
 
-// ListSecretVersions performs a GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions (the `ListSecretVersions` operationId) request.
-func (c *Client) ListSecretVersions(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListSecretVersionsRequest(c.Server, tenant, project, environment, name)
+// ListSecretVersions performs a GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions (the `ListSecretVersions` operationId) request.
+func (c *Client) ListSecretVersions(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListSecretVersionsRequest(c.Server, tenant, project, environment, secret)
 	if err != nil {
 		return nil, err
 	}
@@ -3300,9 +3306,9 @@ func (c *Client) ListSecretVersions(ctx context.Context, tenant TenantSlug, proj
 	return c.Client.Do(req)
 }
 
-// GetSecretVersion performs a GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions/{version} (the `GetSecretVersion` operationId) request.
-func (c *Client) GetSecretVersion(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, version int, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetSecretVersionRequest(c.Server, tenant, project, environment, name, version)
+// GetSecretVersion performs a GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions/{version} (the `GetSecretVersion` operationId) request.
+func (c *Client) GetSecretVersion(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, version int, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSecretVersionRequest(c.Server, tenant, project, environment, secret, version)
 	if err != nil {
 		return nil, err
 	}
@@ -3313,9 +3319,9 @@ func (c *Client) GetSecretVersion(ctx context.Context, tenant TenantSlug, projec
 	return c.Client.Do(req)
 }
 
-// RestoreSecretVersion performs a POST /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions/{version}/restore (the `RestoreSecretVersion` operationId) request.
-func (c *Client) RestoreSecretVersion(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, version int, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewRestoreSecretVersionRequest(c.Server, tenant, project, environment, name, version)
+// RestoreSecretVersion performs a POST /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions/{version}/restore (the `RestoreSecretVersion` operationId) request.
+func (c *Client) RestoreSecretVersion(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, version int, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRestoreSecretVersionRequest(c.Server, tenant, project, environment, secret, version)
 	if err != nil {
 		return nil, err
 	}
@@ -5994,6 +6000,18 @@ func NewListSecretsRequest(server string, tenant TenantSlug, project ProjectSlug
 
 		}
 
+		if params.Name != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "name", *params.Name, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
 		if encoded := queryValues.Encode(); encoded != "" {
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
@@ -6384,7 +6402,7 @@ func NewGetSecretValuesRequest(server string, tenant TenantSlug, project Project
 }
 
 // NewDeleteSecretRequest constructs an http.Request for the DeleteSecret method
-func NewDeleteSecretRequest(server string, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath) (*http.Request, error) {
+func NewDeleteSecretRequest(server string, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -6410,7 +6428,7 @@ func NewDeleteSecretRequest(server string, tenant TenantSlug, project ProjectSlu
 
 	var pathParam3 string
 
-	pathParam3, err = runtime.StyleParamWithOptions("simple", false, "name", name, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam3, err = runtime.StyleParamWithOptions("simple", false, "secret", secret, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -6439,7 +6457,7 @@ func NewDeleteSecretRequest(server string, tenant TenantSlug, project ProjectSlu
 }
 
 // NewGetSecretRequest constructs an http.Request for the GetSecret method
-func NewGetSecretRequest(server string, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath) (*http.Request, error) {
+func NewGetSecretRequest(server string, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -6465,7 +6483,7 @@ func NewGetSecretRequest(server string, tenant TenantSlug, project ProjectSlug, 
 
 	var pathParam3 string
 
-	pathParam3, err = runtime.StyleParamWithOptions("simple", false, "name", name, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam3, err = runtime.StyleParamWithOptions("simple", false, "secret", secret, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -6494,18 +6512,18 @@ func NewGetSecretRequest(server string, tenant TenantSlug, project ProjectSlug, 
 }
 
 // NewUpdateSecretRequest calls the generic UpdateSecret builder with application/json body
-func NewUpdateSecretRequest(server string, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, params *UpdateSecretParams, body UpdateSecretJSONRequestBody) (*http.Request, error) {
+func NewUpdateSecretRequest(server string, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, params *UpdateSecretParams, body UpdateSecretJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewUpdateSecretRequestWithBody(server, tenant, project, environment, name, params, "application/json", bodyReader)
+	return NewUpdateSecretRequestWithBody(server, tenant, project, environment, secret, params, "application/json", bodyReader)
 }
 
 // NewUpdateSecretRequestWithBody constructs an http.Request for the UpdateSecret method, with any body, and a specified content type
-func NewUpdateSecretRequestWithBody(server string, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, params *UpdateSecretParams, contentType string, body io.Reader) (*http.Request, error) {
+func NewUpdateSecretRequestWithBody(server string, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, params *UpdateSecretParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -6531,7 +6549,7 @@ func NewUpdateSecretRequestWithBody(server string, tenant TenantSlug, project Pr
 
 	var pathParam3 string
 
-	pathParam3, err = runtime.StyleParamWithOptions("simple", false, "name", name, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam3, err = runtime.StyleParamWithOptions("simple", false, "secret", secret, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -6575,7 +6593,7 @@ func NewUpdateSecretRequestWithBody(server string, tenant TenantSlug, project Pr
 }
 
 // NewListSecretVersionsRequest constructs an http.Request for the ListSecretVersions method
-func NewListSecretVersionsRequest(server string, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath) (*http.Request, error) {
+func NewListSecretVersionsRequest(server string, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -6601,7 +6619,7 @@ func NewListSecretVersionsRequest(server string, tenant TenantSlug, project Proj
 
 	var pathParam3 string
 
-	pathParam3, err = runtime.StyleParamWithOptions("simple", false, "name", name, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam3, err = runtime.StyleParamWithOptions("simple", false, "secret", secret, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -6630,7 +6648,7 @@ func NewListSecretVersionsRequest(server string, tenant TenantSlug, project Proj
 }
 
 // NewGetSecretVersionRequest constructs an http.Request for the GetSecretVersion method
-func NewGetSecretVersionRequest(server string, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, version int) (*http.Request, error) {
+func NewGetSecretVersionRequest(server string, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, version int) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -6656,7 +6674,7 @@ func NewGetSecretVersionRequest(server string, tenant TenantSlug, project Projec
 
 	var pathParam3 string
 
-	pathParam3, err = runtime.StyleParamWithOptions("simple", false, "name", name, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam3, err = runtime.StyleParamWithOptions("simple", false, "secret", secret, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -6692,7 +6710,7 @@ func NewGetSecretVersionRequest(server string, tenant TenantSlug, project Projec
 }
 
 // NewRestoreSecretVersionRequest constructs an http.Request for the RestoreSecretVersion method
-func NewRestoreSecretVersionRequest(server string, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, version int) (*http.Request, error) {
+func NewRestoreSecretVersionRequest(server string, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, version int) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -6718,7 +6736,7 @@ func NewRestoreSecretVersionRequest(server string, tenant TenantSlug, project Pr
 
 	var pathParam3 string
 
-	pathParam3, err = runtime.StyleParamWithOptions("simple", false, "name", name, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	pathParam3, err = runtime.StyleParamWithOptions("simple", false, "secret", secret, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
 	if err != nil {
 		return nil, err
 	}
@@ -7512,7 +7530,7 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	UpdateEnvironmentWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, body UpdateEnvironmentJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateEnvironmentResponse, error)
 
-	// ListSecretsWithResponse Names, comments, versions and timestamps; no values.
+	// ListSecretsWithResponse IDs, names, comments, versions and timestamps; no values.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -7563,42 +7581,42 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/values (the `GetSecretValues` operationId).
 	GetSecretValuesWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, reqEditors ...RequestEditorFn) (*GetSecretValuesResponse, error)
 
-	// DeleteSecretWithResponse performs a DELETE /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name} (the `DeleteSecret` operationId) request.
+	// DeleteSecretWithResponse performs a DELETE /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret} (the `DeleteSecret` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	DeleteSecretWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, reqEditors ...RequestEditorFn) (*DeleteSecretResponse, error)
+	DeleteSecretWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, reqEditors ...RequestEditorFn) (*DeleteSecretResponse, error)
 
 	// GetSecretWithResponse Read a secret's current value. Audited as secret.read.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
-	// Corresponds with GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name} (the `GetSecret` operationId).
-	GetSecretWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, reqEditors ...RequestEditorFn) (*GetSecretResponse, error)
+	// Corresponds with GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret} (the `GetSecret` operationId).
+	GetSecretWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, reqEditors ...RequestEditorFn) (*GetSecretResponse, error)
 
-	// UpdateSecretWithBodyWithResponse performs a PUT /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name} (the `UpdateSecret` operationId) request,
+	// UpdateSecretWithBodyWithResponse performs a PUT /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret} (the `UpdateSecret` operationId) request,
 	// with any type of body and a specified content type.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	UpdateSecretWithBodyWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, params *UpdateSecretParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateSecretResponse, error)
+	UpdateSecretWithBodyWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, params *UpdateSecretParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateSecretResponse, error)
 
-	// UpdateSecretWithResponse performs a PUT /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name} (the `UpdateSecret` operationId) request.
+	// UpdateSecretWithResponse performs a PUT /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret} (the `UpdateSecret` operationId) request.
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-	UpdateSecretWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, params *UpdateSecretParams, body UpdateSecretJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateSecretResponse, error)
+	UpdateSecretWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, params *UpdateSecretParams, body UpdateSecretJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateSecretResponse, error)
 
-	// ListSecretVersionsWithResponse performs a GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions (the `ListSecretVersions` operationId) request.
+	// ListSecretVersionsWithResponse performs a GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions (the `ListSecretVersions` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	ListSecretVersionsWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, reqEditors ...RequestEditorFn) (*ListSecretVersionsResponse, error)
+	ListSecretVersionsWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, reqEditors ...RequestEditorFn) (*ListSecretVersionsResponse, error)
 
-	// GetSecretVersionWithResponse performs a GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions/{version} (the `GetSecretVersion` operationId) request.
+	// GetSecretVersionWithResponse performs a GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions/{version} (the `GetSecretVersion` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	GetSecretVersionWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, version int, reqEditors ...RequestEditorFn) (*GetSecretVersionResponse, error)
+	GetSecretVersionWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, version int, reqEditors ...RequestEditorFn) (*GetSecretVersionResponse, error)
 
-	// RestoreSecretVersionWithResponse performs a POST /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions/{version}/restore (the `RestoreSecretVersion` operationId) request.
+	// RestoreSecretVersionWithResponse performs a POST /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions/{version}/restore (the `RestoreSecretVersion` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
-	RestoreSecretVersionWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, version int, reqEditors ...RequestEditorFn) (*RestoreSecretVersionResponse, error)
+	RestoreSecretVersionWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, version int, reqEditors ...RequestEditorFn) (*RestoreSecretVersionResponse, error)
 
 	// ChangeProjectKeyModeWithBodyWithResponse Change a project's key mode through a re-wrap migration (core 5.7).
 	//
@@ -12399,7 +12417,7 @@ func (c *ClientWithResponses) UpdateEnvironmentWithResponse(ctx context.Context,
 	return ParseUpdateEnvironmentResponse(rsp)
 }
 
-// ListSecretsWithResponse Names, comments, versions and timestamps; no values.
+// ListSecretsWithResponse IDs, names, comments, versions and timestamps; no values.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -12504,11 +12522,11 @@ func (c *ClientWithResponses) GetSecretValuesWithResponse(ctx context.Context, t
 	return ParseGetSecretValuesResponse(rsp)
 }
 
-// DeleteSecretWithResponse performs a DELETE /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name} (the `DeleteSecret` operationId) request.
+// DeleteSecretWithResponse performs a DELETE /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret} (the `DeleteSecret` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) DeleteSecretWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, reqEditors ...RequestEditorFn) (*DeleteSecretResponse, error) {
-	rsp, err := c.DeleteSecret(ctx, tenant, project, environment, name, reqEditors...)
+func (c *ClientWithResponses) DeleteSecretWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, reqEditors ...RequestEditorFn) (*DeleteSecretResponse, error) {
+	rsp, err := c.DeleteSecret(ctx, tenant, project, environment, secret, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -12519,64 +12537,64 @@ func (c *ClientWithResponses) DeleteSecretWithResponse(ctx context.Context, tena
 //
 // Returns a wrapper object for the known response body format(s).
 //
-// Corresponds with GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name} (the `GetSecret` operationId).
-func (c *ClientWithResponses) GetSecretWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, reqEditors ...RequestEditorFn) (*GetSecretResponse, error) {
-	rsp, err := c.GetSecret(ctx, tenant, project, environment, name, reqEditors...)
+// Corresponds with GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret} (the `GetSecret` operationId).
+func (c *ClientWithResponses) GetSecretWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, reqEditors ...RequestEditorFn) (*GetSecretResponse, error) {
+	rsp, err := c.GetSecret(ctx, tenant, project, environment, secret, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseGetSecretResponse(rsp)
 }
 
-// UpdateSecretWithBodyWithResponse performs a PUT /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name} (the `UpdateSecret` operationId) request,
+// UpdateSecretWithBodyWithResponse performs a PUT /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret} (the `UpdateSecret` operationId) request,
 // with any type of body and a specified content type.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) UpdateSecretWithBodyWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, params *UpdateSecretParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateSecretResponse, error) {
-	rsp, err := c.UpdateSecretWithBody(ctx, tenant, project, environment, name, params, contentType, body, reqEditors...)
+func (c *ClientWithResponses) UpdateSecretWithBodyWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, params *UpdateSecretParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateSecretResponse, error) {
+	rsp, err := c.UpdateSecretWithBody(ctx, tenant, project, environment, secret, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseUpdateSecretResponse(rsp)
 }
 
-// UpdateSecretWithResponse performs a PUT /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name} (the `UpdateSecret` operationId) request.
+// UpdateSecretWithResponse performs a PUT /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret} (the `UpdateSecret` operationId) request.
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) UpdateSecretWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, params *UpdateSecretParams, body UpdateSecretJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateSecretResponse, error) {
-	rsp, err := c.UpdateSecret(ctx, tenant, project, environment, name, params, body, reqEditors...)
+func (c *ClientWithResponses) UpdateSecretWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, params *UpdateSecretParams, body UpdateSecretJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateSecretResponse, error) {
+	rsp, err := c.UpdateSecret(ctx, tenant, project, environment, secret, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseUpdateSecretResponse(rsp)
 }
 
-// ListSecretVersionsWithResponse performs a GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions (the `ListSecretVersions` operationId) request.
+// ListSecretVersionsWithResponse performs a GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions (the `ListSecretVersions` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) ListSecretVersionsWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, reqEditors ...RequestEditorFn) (*ListSecretVersionsResponse, error) {
-	rsp, err := c.ListSecretVersions(ctx, tenant, project, environment, name, reqEditors...)
+func (c *ClientWithResponses) ListSecretVersionsWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, reqEditors ...RequestEditorFn) (*ListSecretVersionsResponse, error) {
+	rsp, err := c.ListSecretVersions(ctx, tenant, project, environment, secret, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseListSecretVersionsResponse(rsp)
 }
 
-// GetSecretVersionWithResponse performs a GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions/{version} (the `GetSecretVersion` operationId) request.
+// GetSecretVersionWithResponse performs a GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions/{version} (the `GetSecretVersion` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) GetSecretVersionWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, version int, reqEditors ...RequestEditorFn) (*GetSecretVersionResponse, error) {
-	rsp, err := c.GetSecretVersion(ctx, tenant, project, environment, name, version, reqEditors...)
+func (c *ClientWithResponses) GetSecretVersionWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, version int, reqEditors ...RequestEditorFn) (*GetSecretVersionResponse, error) {
+	rsp, err := c.GetSecretVersion(ctx, tenant, project, environment, secret, version, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseGetSecretVersionResponse(rsp)
 }
 
-// RestoreSecretVersionWithResponse performs a POST /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions/{version}/restore (the `RestoreSecretVersion` operationId) request.
+// RestoreSecretVersionWithResponse performs a POST /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions/{version}/restore (the `RestoreSecretVersion` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
-func (c *ClientWithResponses) RestoreSecretVersionWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, version int, reqEditors ...RequestEditorFn) (*RestoreSecretVersionResponse, error) {
-	rsp, err := c.RestoreSecretVersion(ctx, tenant, project, environment, name, version, reqEditors...)
+func (c *ClientWithResponses) RestoreSecretVersionWithResponse(ctx context.Context, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, version int, reqEditors ...RequestEditorFn) (*RestoreSecretVersionResponse, error) {
+	rsp, err := c.RestoreSecretVersion(ctx, tenant, project, environment, secret, version, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15497,7 +15515,7 @@ type ServerInterface interface {
 
 	// (PATCH /api/v1/tenants/{tenant}/projects/{project}/environments/{environment})
 	UpdateEnvironment(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug)
-	// ListSecrets Names, comments, versions and timestamps; no values.
+	// ListSecrets IDs, names, comments, versions and timestamps; no values.
 	// (GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets)
 	ListSecrets(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, params ListSecretsParams)
 
@@ -15519,23 +15537,23 @@ type ServerInterface interface {
 	// (GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/values)
 	GetSecretValues(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug)
 
-	// (DELETE /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name})
-	DeleteSecret(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath)
+	// (DELETE /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret})
+	DeleteSecret(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId)
 	// GetSecret Read a secret's current value. Audited as secret.read.
-	// (GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name})
-	GetSecret(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath)
+	// (GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret})
+	GetSecret(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId)
 
-	// (PUT /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name})
-	UpdateSecret(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, params UpdateSecretParams)
+	// (PUT /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret})
+	UpdateSecret(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, params UpdateSecretParams)
 
-	// (GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions)
-	ListSecretVersions(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath)
+	// (GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions)
+	ListSecretVersions(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId)
 
-	// (GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions/{version})
-	GetSecretVersion(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, version int)
+	// (GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions/{version})
+	GetSecretVersion(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, version int)
 
-	// (POST /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions/{version}/restore)
-	RestoreSecretVersion(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, version int)
+	// (POST /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions/{version}/restore)
+	RestoreSecretVersion(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, version int)
 	// ChangeProjectKeyMode Change a project's key mode through a re-wrap migration (core 5.7).
 	// (POST /api/v1/tenants/{tenant}/projects/{project}/key-mode)
 	ChangeProjectKeyMode(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug)
@@ -17166,6 +17184,19 @@ func (siw *ServerInterfaceWrapper) ListSecrets(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// ------------- Optional query parameter "name" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "name", r.URL.Query(), &params.Name, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "name"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListSecrets(w, r, tenant, project, environment, params)
 	}))
@@ -17515,17 +17546,17 @@ func (siw *ServerInterfaceWrapper) DeleteSecret(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// ------------- Path parameter "name" -------------
-	var name SecretNamePath
+	// ------------- Path parameter "secret" -------------
+	var secret SecretId
 
-	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "secret", r.PathValue("secret"), &secret, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "secret", Err: err})
 		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteSecret(w, r, tenant, project, environment, name)
+		siw.Handler.DeleteSecret(w, r, tenant, project, environment, secret)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -17568,17 +17599,17 @@ func (siw *ServerInterfaceWrapper) GetSecret(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// ------------- Path parameter "name" -------------
-	var name SecretNamePath
+	// ------------- Path parameter "secret" -------------
+	var secret SecretId
 
-	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "secret", r.PathValue("secret"), &secret, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "secret", Err: err})
 		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetSecret(w, r, tenant, project, environment, name)
+		siw.Handler.GetSecret(w, r, tenant, project, environment, secret)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -17621,12 +17652,12 @@ func (siw *ServerInterfaceWrapper) UpdateSecret(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// ------------- Path parameter "name" -------------
-	var name SecretNamePath
+	// ------------- Path parameter "secret" -------------
+	var secret SecretId
 
-	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "secret", r.PathValue("secret"), &secret, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "secret", Err: err})
 		return
 	}
 
@@ -17659,7 +17690,7 @@ func (siw *ServerInterfaceWrapper) UpdateSecret(w http.ResponseWriter, r *http.R
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateSecret(w, r, tenant, project, environment, name, params)
+		siw.Handler.UpdateSecret(w, r, tenant, project, environment, secret, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -17702,17 +17733,17 @@ func (siw *ServerInterfaceWrapper) ListSecretVersions(w http.ResponseWriter, r *
 		return
 	}
 
-	// ------------- Path parameter "name" -------------
-	var name SecretNamePath
+	// ------------- Path parameter "secret" -------------
+	var secret SecretId
 
-	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "secret", r.PathValue("secret"), &secret, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "secret", Err: err})
 		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListSecretVersions(w, r, tenant, project, environment, name)
+		siw.Handler.ListSecretVersions(w, r, tenant, project, environment, secret)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -17755,12 +17786,12 @@ func (siw *ServerInterfaceWrapper) GetSecretVersion(w http.ResponseWriter, r *ht
 		return
 	}
 
-	// ------------- Path parameter "name" -------------
-	var name SecretNamePath
+	// ------------- Path parameter "secret" -------------
+	var secret SecretId
 
-	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "secret", r.PathValue("secret"), &secret, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "secret", Err: err})
 		return
 	}
 
@@ -17774,7 +17805,7 @@ func (siw *ServerInterfaceWrapper) GetSecretVersion(w http.ResponseWriter, r *ht
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetSecretVersion(w, r, tenant, project, environment, name, version)
+		siw.Handler.GetSecretVersion(w, r, tenant, project, environment, secret, version)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -17817,12 +17848,12 @@ func (siw *ServerInterfaceWrapper) RestoreSecretVersion(w http.ResponseWriter, r
 		return
 	}
 
-	// ------------- Path parameter "name" -------------
-	var name SecretNamePath
+	// ------------- Path parameter "secret" -------------
+	var secret SecretId
 
-	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "secret", r.PathValue("secret"), &secret, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "secret", Err: err})
 		return
 	}
 
@@ -17836,7 +17867,7 @@ func (siw *ServerInterfaceWrapper) RestoreSecretVersion(w http.ResponseWriter, r
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.RestoreSecretVersion(w, r, tenant, project, environment, name, version)
+		siw.Handler.RestoreSecretVersion(w, r, tenant, project, environment, secret, version)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -18208,12 +18239,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/tenants/{tenant}/projects/{project}/compare", wrapper.CompareSecrets)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets", wrapper.ListSecrets)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets", wrapper.CreateSecret)
-	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}", wrapper.DeleteSecret)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}", wrapper.GetSecret)
-	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}", wrapper.UpdateSecret)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions", wrapper.ListSecretVersions)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions/{version}", wrapper.GetSecretVersion)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions/{version}/restore", wrapper.RestoreSecretVersion)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}", wrapper.DeleteSecret)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}", wrapper.GetSecret)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}", wrapper.UpdateSecret)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions", wrapper.ListSecretVersions)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions/{version}", wrapper.GetSecretVersion)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions/{version}/restore", wrapper.RestoreSecretVersion)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/deleted", wrapper.ListDeletedSecrets)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/deleted/{id}/restore", wrapper.RestoreDeletedSecret)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/import", wrapper.ImportSecrets)
@@ -20916,7 +20947,7 @@ type DeleteSecretRequestObject struct {
 	Tenant      TenantSlug      `json:"tenant"`
 	Project     ProjectSlug     `json:"project"`
 	Environment EnvironmentSlug `json:"environment"`
-	Name        SecretNamePath  `json:"name"`
+	Secret      SecretId        `json:"secret"`
 }
 
 type DeleteSecretResponseObject interface {
@@ -20952,7 +20983,7 @@ type GetSecretRequestObject struct {
 	Tenant      TenantSlug      `json:"tenant"`
 	Project     ProjectSlug     `json:"project"`
 	Environment EnvironmentSlug `json:"environment"`
-	Name        SecretNamePath  `json:"name"`
+	Secret      SecretId        `json:"secret"`
 }
 
 type GetSecretResponseObject interface {
@@ -21004,7 +21035,7 @@ type UpdateSecretRequestObject struct {
 	Tenant      TenantSlug      `json:"tenant"`
 	Project     ProjectSlug     `json:"project"`
 	Environment EnvironmentSlug `json:"environment"`
-	Name        SecretNamePath  `json:"name"`
+	Secret      SecretId        `json:"secret"`
 	Params      UpdateSecretParams
 	Body        *UpdateSecretJSONRequestBody
 }
@@ -21058,7 +21089,7 @@ type ListSecretVersionsRequestObject struct {
 	Tenant      TenantSlug      `json:"tenant"`
 	Project     ProjectSlug     `json:"project"`
 	Environment EnvironmentSlug `json:"environment"`
-	Name        SecretNamePath  `json:"name"`
+	Secret      SecretId        `json:"secret"`
 }
 
 type ListSecretVersionsResponseObject interface {
@@ -21102,7 +21133,7 @@ type GetSecretVersionRequestObject struct {
 	Tenant      TenantSlug      `json:"tenant"`
 	Project     ProjectSlug     `json:"project"`
 	Environment EnvironmentSlug `json:"environment"`
-	Name        SecretNamePath  `json:"name"`
+	Secret      SecretId        `json:"secret"`
 	Version     int             `json:"version"`
 }
 
@@ -21145,7 +21176,7 @@ type RestoreSecretVersionRequestObject struct {
 	Tenant      TenantSlug      `json:"tenant"`
 	Project     ProjectSlug     `json:"project"`
 	Environment EnvironmentSlug `json:"environment"`
-	Name        SecretNamePath  `json:"name"`
+	Secret      SecretId        `json:"secret"`
 	Version     int             `json:"version"`
 }
 
@@ -21609,7 +21640,7 @@ type StrictServerInterface interface {
 
 	// (PATCH /api/v1/tenants/{tenant}/projects/{project}/environments/{environment})
 	UpdateEnvironment(ctx context.Context, request UpdateEnvironmentRequestObject) (UpdateEnvironmentResponseObject, error)
-	// ListSecrets Names, comments, versions and timestamps; no values.
+	// ListSecrets IDs, names, comments, versions and timestamps; no values.
 	// (GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets)
 	ListSecrets(ctx context.Context, request ListSecretsRequestObject) (ListSecretsResponseObject, error)
 
@@ -21631,22 +21662,22 @@ type StrictServerInterface interface {
 	// (GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/values)
 	GetSecretValues(ctx context.Context, request GetSecretValuesRequestObject) (GetSecretValuesResponseObject, error)
 
-	// (DELETE /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name})
+	// (DELETE /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret})
 	DeleteSecret(ctx context.Context, request DeleteSecretRequestObject) (DeleteSecretResponseObject, error)
 	// GetSecret Read a secret's current value. Audited as secret.read.
-	// (GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name})
+	// (GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret})
 	GetSecret(ctx context.Context, request GetSecretRequestObject) (GetSecretResponseObject, error)
 
-	// (PUT /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name})
+	// (PUT /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret})
 	UpdateSecret(ctx context.Context, request UpdateSecretRequestObject) (UpdateSecretResponseObject, error)
 
-	// (GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions)
+	// (GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions)
 	ListSecretVersions(ctx context.Context, request ListSecretVersionsRequestObject) (ListSecretVersionsResponseObject, error)
 
-	// (GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions/{version})
+	// (GET /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions/{version})
 	GetSecretVersion(ctx context.Context, request GetSecretVersionRequestObject) (GetSecretVersionResponseObject, error)
 
-	// (POST /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions/{version}/restore)
+	// (POST /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions/{version}/restore)
 	RestoreSecretVersion(ctx context.Context, request RestoreSecretVersionRequestObject) (RestoreSecretVersionResponseObject, error)
 	// ChangeProjectKeyMode Change a project's key mode through a re-wrap migration (core 5.7).
 	// (POST /api/v1/tenants/{tenant}/projects/{project}/key-mode)
@@ -23598,13 +23629,13 @@ func (sh *strictHandler) GetSecretValues(w http.ResponseWriter, r *http.Request,
 }
 
 // DeleteSecret operation middleware
-func (sh *strictHandler) DeleteSecret(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath) {
+func (sh *strictHandler) DeleteSecret(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId) {
 	var request DeleteSecretRequestObject
 
 	request.Tenant = tenant
 	request.Project = project
 	request.Environment = environment
-	request.Name = name
+	request.Secret = secret
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.DeleteSecret(ctx, request.(DeleteSecretRequestObject))
@@ -23627,13 +23658,13 @@ func (sh *strictHandler) DeleteSecret(w http.ResponseWriter, r *http.Request, te
 }
 
 // GetSecret operation middleware
-func (sh *strictHandler) GetSecret(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath) {
+func (sh *strictHandler) GetSecret(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId) {
 	var request GetSecretRequestObject
 
 	request.Tenant = tenant
 	request.Project = project
 	request.Environment = environment
-	request.Name = name
+	request.Secret = secret
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.GetSecret(ctx, request.(GetSecretRequestObject))
@@ -23656,13 +23687,13 @@ func (sh *strictHandler) GetSecret(w http.ResponseWriter, r *http.Request, tenan
 }
 
 // UpdateSecret operation middleware
-func (sh *strictHandler) UpdateSecret(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, params UpdateSecretParams) {
+func (sh *strictHandler) UpdateSecret(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, params UpdateSecretParams) {
 	var request UpdateSecretRequestObject
 
 	request.Tenant = tenant
 	request.Project = project
 	request.Environment = environment
-	request.Name = name
+	request.Secret = secret
 	request.Params = params
 
 	var body UpdateSecretJSONRequestBody
@@ -23693,13 +23724,13 @@ func (sh *strictHandler) UpdateSecret(w http.ResponseWriter, r *http.Request, te
 }
 
 // ListSecretVersions operation middleware
-func (sh *strictHandler) ListSecretVersions(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath) {
+func (sh *strictHandler) ListSecretVersions(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId) {
 	var request ListSecretVersionsRequestObject
 
 	request.Tenant = tenant
 	request.Project = project
 	request.Environment = environment
-	request.Name = name
+	request.Secret = secret
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ListSecretVersions(ctx, request.(ListSecretVersionsRequestObject))
@@ -23722,13 +23753,13 @@ func (sh *strictHandler) ListSecretVersions(w http.ResponseWriter, r *http.Reque
 }
 
 // GetSecretVersion operation middleware
-func (sh *strictHandler) GetSecretVersion(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, version int) {
+func (sh *strictHandler) GetSecretVersion(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, version int) {
 	var request GetSecretVersionRequestObject
 
 	request.Tenant = tenant
 	request.Project = project
 	request.Environment = environment
-	request.Name = name
+	request.Secret = secret
 	request.Version = version
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
@@ -23752,13 +23783,13 @@ func (sh *strictHandler) GetSecretVersion(w http.ResponseWriter, r *http.Request
 }
 
 // RestoreSecretVersion operation middleware
-func (sh *strictHandler) RestoreSecretVersion(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, name SecretNamePath, version int) {
+func (sh *strictHandler) RestoreSecretVersion(w http.ResponseWriter, r *http.Request, tenant TenantSlug, project ProjectSlug, environment EnvironmentSlug, secret SecretId, version int) {
 	var request RestoreSecretVersionRequestObject
 
 	request.Tenant = tenant
 	request.Project = project
 	request.Environment = environment
-	request.Name = name
+	request.Secret = secret
 	request.Version = version
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
@@ -23957,145 +23988,148 @@ func (sh *strictHandler) GetReadyz(w http.ResponseWriter, r *http.Request) {
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"9/8HAA==",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

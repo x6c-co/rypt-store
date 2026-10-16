@@ -80,9 +80,14 @@ All are in `api/openapi.yaml`:
 
 ## Behaviour choices
 
-- **Reserved secret names.** `deleted`, `export`, `import`, and `values` are
-  refused as secret names, because `.../secrets/{name}` would collide with the
-  fixed paths of feature 01 section 4.
+- **Secrets are addressed by ID, not name.** Feature 01 section 4 puts the
+  name in the path (`.../secrets/{name}`). The build uses the secret's UUIDv7
+  ID instead (`.../secrets/{secret}`), so names never appear in URLs or access
+  logs and no name collides with the fixed paths `deleted`, `export`,
+  `import`, and `values`. `GET .../secrets?name=` finds a secret by name, the
+  Compare grid returns each cell's secret ID, and the CLI accepts a name or an
+  ID. A restored secret keeps its ID; a new secret that reuses a deleted
+  one's name gets a new ID.
 - **Slug and label reuse.** Project slugs are unique among live projects, and
   service token labels among unrevoked tokens (partial unique indexes), so a
   deleted project's slug or a revoked token's label can be reused.

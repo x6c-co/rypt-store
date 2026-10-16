@@ -14,6 +14,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
@@ -50,6 +51,31 @@ func listAll(ctx context.Context, s *session, t, p, en string) ([]gen.Secret, er
 	}
 }
 
+// findSecret resolves a secret name, or an ID, to the live secret. Names
+// cannot contain "-", so a UUID argument is never a name.
+func findSecret(ctx context.Context, s *session, t, p, en, ref string) (*gen.Secret, error) {
+	if id, err := uuid.Parse(ref); err == nil {
+		return &gen.Secret{Id: id.String()}, nil
+	}
+	r, err := s.client.ListSecretsWithResponse(ctx, t, p, en, &gen.ListSecretsParams{Name: &ref})
+	if err := check(r, err, 200); err != nil {
+		return nil, err
+	}
+	if len(r.JSON200.Secrets) == 0 {
+		return nil, fmt.Errorf("no secret named %s in %s", ref, en)
+	}
+	return &r.JSON200.Secrets[0], nil
+}
+
+// secretID resolves a name or ID to the API's path parameter.
+func secretID(ctx context.Context, s *session, t, p, en, ref string) (gen.SecretId, error) {
+	x, err := findSecret(ctx, s, t, p, en, ref)
+	if err != nil {
+		return gen.SecretId{}, err
+	}
+	return uuid.Parse(x.Id)
+}
+
 func secretsCmd(e *env, g *globals) *cobra.Command {
 	cmd := &cobra.Command{Use: "secrets", Short: "Read and change secrets"}
 	cmd.AddCommand(&cobra.Command{
@@ -83,7 +109,7 @@ func secretsCmd(e *env, g *globals) *cobra.Command {
 	var version int
 	var plain bool
 	get := &cobra.Command{
-		Use:   "get NAME",
+		Use:   "get NAME|ID",
 		Short: "Print a secret's value",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -92,16 +118,20 @@ func secretsCmd(e *env, g *globals) *cobra.Command {
 				return err
 			}
 			ctx := cmd.Context()
+			id, err := secretID(ctx, s, t, p, en, args[0])
+			if err != nil {
+				return err
+			}
 			var value string
 			var shown any
 			if version > 0 {
-				r, err := s.client.GetSecretVersionWithResponse(ctx, t, p, en, args[0], version)
+				r, err := s.client.GetSecretVersionWithResponse(ctx, t, p, en, id, version)
 				if err := check(r, err, 200); err != nil {
 					return err
 				}
 				value, shown = r.JSON200.Value, r.JSON200
 			} else {
-				r, err := s.client.GetSecretWithResponse(ctx, t, p, en, args[0])
+				r, err := s.client.GetSecretWithResponse(ctx, t, p, en, id)
 				if err := check(r, err, 200); err != nil {
 					return err
 				}
@@ -176,7 +206,7 @@ func secretsCmd(e *env, g *globals) *cobra.Command {
 	cmd.AddCommand(set)
 
 	cmd.AddCommand(&cobra.Command{
-		Use:   "delete NAME",
+		Use:   "delete NAME|ID",
 		Short: "Delete a secret (restorable until purged)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -184,7 +214,11 @@ func secretsCmd(e *env, g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			r, err := s.client.DeleteSecretWithResponse(cmd.Context(), t, p, en, args[0])
+			id, err := secretID(cmd.Context(), s, t, p, en, args[0])
+			if err != nil {
+				return err
+			}
+			r, err := s.client.DeleteSecretWithResponse(cmd.Context(), t, p, en, id)
 			if err := check(r, err, 204); err != nil {
 				return err
 			}
@@ -193,7 +227,7 @@ func secretsCmd(e *env, g *globals) *cobra.Command {
 	})
 
 	cmd.AddCommand(&cobra.Command{
-		Use:   "history NAME",
+		Use:   "history NAME|ID",
 		Short: "List a secret's versions",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -201,7 +235,11 @@ func secretsCmd(e *env, g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			r, err := s.client.ListSecretVersionsWithResponse(cmd.Context(), t, p, en, args[0])
+			id, err := secretID(cmd.Context(), s, t, p, en, args[0])
+			if err != nil {
+				return err
+			}
+			r, err := s.client.ListSecretVersionsWithResponse(cmd.Context(), t, p, en, id)
 			if err := check(r, err, 200); err != nil {
 				return err
 			}
@@ -223,7 +261,7 @@ func secretsCmd(e *env, g *globals) *cobra.Command {
 
 	var restoreVersion int
 	restore := &cobra.Command{
-		Use:   "restore NAME --version N",
+		Use:   "restore NAME|ID --version N",
 		Short: "Write an old version's value as a new version",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -234,7 +272,11 @@ func secretsCmd(e *env, g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			r, err := s.client.RestoreSecretVersionWithResponse(cmd.Context(), t, p, en, args[0], restoreVersion)
+			id, err := secretID(cmd.Context(), s, t, p, en, args[0])
+			if err != nil {
+				return err
+			}
+			r, err := s.client.RestoreSecretVersionWithResponse(cmd.Context(), t, p, en, id, restoreVersion)
 			if err := check(r, err, 200); err != nil {
 				return err
 			}
@@ -261,26 +303,28 @@ func promptValue(e *env, name string) (string, error) {
 
 // setSecret creates the secret or updates it against its current version.
 func setSecret(ctx context.Context, s *session, t, p, en, name, value string, comment *string) (int, error) {
-	xs, err := listAll(ctx, s, t, p, en)
-	if err != nil {
+	r, err := s.client.ListSecretsWithResponse(ctx, t, p, en, &gen.ListSecretsParams{Name: &name})
+	if err := check(r, err, 200); err != nil {
 		return 0, err
 	}
-	for _, x := range xs {
-		if x.Name != name {
-			continue
-		}
-		r, err := s.client.UpdateSecretWithResponse(ctx, t, p, en, name, &gen.UpdateSecretParams{IfMatch: secrets.ETag(x.Version)},
-			gen.UpdateSecretJSONRequestBody{Value: value, Comment: comment})
-		if err := check(r, err, 200); err != nil {
+	if len(r.JSON200.Secrets) == 1 {
+		x := r.JSON200.Secrets[0]
+		id, err := uuid.Parse(x.Id)
+		if err != nil {
 			return 0, err
 		}
-		return r.JSON200.Version, nil
+		u, err := s.client.UpdateSecretWithResponse(ctx, t, p, en, id, &gen.UpdateSecretParams{IfMatch: secrets.ETag(x.Version)},
+			gen.UpdateSecretJSONRequestBody{Value: value, Comment: comment})
+		if err := check(u, err, 200); err != nil {
+			return 0, err
+		}
+		return u.JSON200.Version, nil
 	}
-	r, err := s.client.CreateSecretWithResponse(ctx, t, p, en, gen.CreateSecretJSONRequestBody{Name: name, Value: value, Comment: comment})
-	if err := check(r, err, 201); err != nil {
+	c, err := s.client.CreateSecretWithResponse(ctx, t, p, en, gen.CreateSecretJSONRequestBody{Name: name, Value: value, Comment: comment})
+	if err := check(c, err, 201); err != nil {
 		return 0, err
 	}
-	return r.JSON201.Version, nil
+	return c.JSON201.Version, nil
 }
 
 func importCmd(e *env, g *globals) *cobra.Command {

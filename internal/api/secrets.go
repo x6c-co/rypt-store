@@ -86,7 +86,7 @@ func (h *Handlers) CompareSecrets(ctx context.Context, req gen.CompareSecretsReq
 		for _, e := range envs {
 			c := gen.CompareCell{Environment: e.Slug, Missing: true}
 			if g, ok := r.Groups[e.ID]; ok {
-				c.Missing, c.Group = false, ptr(g)
+				c.Missing, c.Group, c.Secret = false, ptr(g), ptr(r.IDs[e.ID])
 			}
 			row.Cells = append(row.Cells, c)
 		}
@@ -103,6 +103,17 @@ func (h *Handlers) ListSecrets(ctx context.Context, req gen.ListSecretsRequestOb
 	// Service tokens list the names in their environments too.
 	if !s.can(authz.ProjectRead) && !s.can(authz.SecretRead) {
 		return nil, s.require(authz.ProjectRead)
+	}
+	if name := req.Params.Name; name != nil {
+		x, err := h.d.Secrets.GetByName(ctx, s.target(), *name)
+		out := []gen.Secret{}
+		switch {
+		case err == nil:
+			out = append(out, h.secretJSON(ctx, h.names(), x))
+		case !errors.Is(err, store.ErrNotFound):
+			return nil, err
+		}
+		return gen.ListSecrets200JSONResponse{Secrets: out}, nil
 	}
 	xs, err := h.d.Store.ListSecrets(ctx, s.tenant.ID, s.env.ID)
 	if err != nil {
@@ -170,7 +181,7 @@ func (h *Handlers) GetSecret(ctx context.Context, req gen.GetSecretRequestObject
 	if err != nil {
 		return nil, err
 	}
-	x, value, err := h.d.Secrets.Read(ctx, s.target(), s.actor(), req.Name)
+	x, value, err := h.d.Secrets.Read(ctx, s.target(), s.actor(), req.Secret.String())
 	if err != nil {
 		return nil, secretErr(err)
 	}
@@ -198,7 +209,7 @@ func (h *Handlers) UpdateSecret(ctx context.Context, req gen.UpdateSecretRequest
 	if err := validateSecretInput(nil, req.Body.Value, req.Body.Comment); err != nil {
 		return nil, err
 	}
-	x, err := h.d.Secrets.Update(ctx, s.target(), s.actor(), req.Name, req.Body.Value, req.Body.Comment, expected)
+	x, err := h.d.Secrets.Update(ctx, s.target(), s.actor(), req.Secret.String(), req.Body.Value, req.Body.Comment, expected)
 	if err != nil {
 		return nil, secretErr(err)
 	}
@@ -211,7 +222,7 @@ func (h *Handlers) DeleteSecret(ctx context.Context, req gen.DeleteSecretRequest
 	if err != nil {
 		return nil, err
 	}
-	if err := h.d.Secrets.Delete(ctx, s.target(), s.actor(), req.Name); err != nil {
+	if err := h.d.Secrets.Delete(ctx, s.target(), s.actor(), req.Secret.String()); err != nil {
 		return nil, secretErr(err)
 	}
 	return gen.DeleteSecret204Response{}, nil
@@ -227,7 +238,7 @@ func (h *Handlers) ListSecretVersions(ctx context.Context, req gen.ListSecretVer
 	if err != nil {
 		return nil, err
 	}
-	x, vs, err := h.d.Secrets.History(ctx, s.target(), req.Name)
+	x, vs, err := h.d.Secrets.History(ctx, s.target(), req.Secret.String())
 	if err != nil {
 		return nil, secretErr(err)
 	}
@@ -244,7 +255,7 @@ func (h *Handlers) GetSecretVersion(ctx context.Context, req gen.GetSecretVersio
 	if err != nil {
 		return nil, err
 	}
-	v, value, err := h.d.Secrets.ReadVersion(ctx, s.target(), s.actor(), req.Name, req.Version)
+	v, value, err := h.d.Secrets.ReadVersion(ctx, s.target(), s.actor(), req.Secret.String(), req.Version)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil, errNotFound("secret version")
 	}
@@ -252,7 +263,7 @@ func (h *Handlers) GetSecretVersion(ctx context.Context, req gen.GetSecretVersio
 		return nil, err
 	}
 	noStore(ctx)
-	x, err := h.d.Secrets.Get(ctx, s.target(), req.Name)
+	x, err := h.d.Secrets.ByID(ctx, s.target(), req.Secret.String())
 	if err != nil {
 		return nil, secretErr(err)
 	}
@@ -266,7 +277,7 @@ func (h *Handlers) RestoreSecretVersion(ctx context.Context, req gen.RestoreSecr
 	if err != nil {
 		return nil, err
 	}
-	x, err := h.d.Secrets.RestoreVersion(ctx, s.target(), s.actor(), req.Name, req.Version)
+	x, err := h.d.Secrets.RestoreVersion(ctx, s.target(), s.actor(), req.Secret.String(), req.Version)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil, errNotFound("secret version")
 	}

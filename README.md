@@ -48,6 +48,10 @@ rypt-store export --format shell
 rypt-store run -- ./server                              # secrets in the child's environment
 ```
 
+Commands that take a secret accept its name or its ID. The API addresses
+secrets by ID (`.../secrets/{id}`), and `GET .../secrets?name=` finds one by
+name.
+
 `.rypt-store.yaml` holds the server, tenant, project, and default environment.
 It contains no credentials and is safe to commit. The CLI session is stored in
 your user config directory with mode 0600. `--tenant`, `--project`, `--env`,

@@ -1094,10 +1094,14 @@ paths:
     get:
       tags: [secrets]
       operationId: listSecrets
-      summary: Names, comments, versions and timestamps; no values.
+      summary: IDs, names, comments, versions and timestamps; no values.
       parameters:
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Cursor"
+        - name: name
+          in: query
+          description: Return only the live secret with exactly this name (zero or one item).
+          schema: { type: string }
       responses:
         "200":
           description: Secrets ordered by name.
@@ -1135,12 +1139,12 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Secret" }
         default: { $ref: "#/components/responses/Problem" }
-  /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}:
+  /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}:
     parameters:
       - $ref: "#/components/parameters/TenantSlug"
       - $ref: "#/components/parameters/ProjectSlug"
       - $ref: "#/components/parameters/EnvironmentSlug"
-      - $ref: "#/components/parameters/SecretNamePath"
+      - $ref: "#/components/parameters/SecretId"
     get:
       tags: [secrets]
       operationId: getSecret
@@ -1188,12 +1192,12 @@ paths:
       responses:
         "204": { description: Soft-deleted; restorable until purged. }
         default: { $ref: "#/components/responses/Problem" }
-  /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions:
+  /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions:
     parameters:
       - $ref: "#/components/parameters/TenantSlug"
       - $ref: "#/components/parameters/ProjectSlug"
       - $ref: "#/components/parameters/EnvironmentSlug"
-      - $ref: "#/components/parameters/SecretNamePath"
+      - $ref: "#/components/parameters/SecretId"
     get:
       tags: [secrets]
       operationId: listSecretVersions
@@ -1210,12 +1214,12 @@ paths:
                     type: array
                     items: { $ref: "#/components/schemas/SecretVersion" }
         default: { $ref: "#/components/responses/Problem" }
-  /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions/{version}:
+  /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions/{version}:
     parameters:
       - $ref: "#/components/parameters/TenantSlug"
       - $ref: "#/components/parameters/ProjectSlug"
       - $ref: "#/components/parameters/EnvironmentSlug"
-      - $ref: "#/components/parameters/SecretNamePath"
+      - $ref: "#/components/parameters/SecretId"
       - { name: version, in: path, required: true, schema: { type: integer, minimum: 1 } }
     get:
       tags: [secrets]
@@ -1227,12 +1231,12 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/SecretVersionWithValue" }
         default: { $ref: "#/components/responses/Problem" }
-  /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions/{version}/restore:
+  /api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions/{version}/restore:
     parameters:
       - $ref: "#/components/parameters/TenantSlug"
       - $ref: "#/components/parameters/ProjectSlug"
       - $ref: "#/components/parameters/EnvironmentSlug"
-      - $ref: "#/components/parameters/SecretNamePath"
+      - $ref: "#/components/parameters/SecretId"
       - { name: version, in: path, required: true, schema: { type: integer, minimum: 1 } }
     post:
       tags: [secrets]
@@ -1447,11 +1451,12 @@ components:
       required: true
       description: Environment slug.
       schema: { type: string }
-    SecretNamePath:
-      name: name
+    SecretId:
+      name: secret
       in: path
       required: true
-      schema: { type: string }
+      description: The secret's ID (a UUID). Names are not used in paths; filter the list by name to find an ID.
+      schema: { type: string, format: uuid }
     Limit:
       name: limit
       in: query
@@ -2032,6 +2037,7 @@ components:
       properties:
         environment: { type: string, description: Environment slug. }
         missing: { type: boolean }
+        secret: { type: [string, "null"], description: "The secret's ID in this environment; null when missing." }
         group:
           type: [integer, "null"]
           description: Cells in the row with equal values share a group label; labels mean nothing outside the row.

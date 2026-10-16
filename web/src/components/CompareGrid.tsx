@@ -14,7 +14,8 @@ export function CompareGrid({
 }: {
   grid: Schemas["CompareGrid"];
   canWrite: boolean;
-  onOpen(environment: string, name: string): void;
+  /** Opens the secret with this ID in that environment. */
+  onOpen(environment: string, secret: string): void;
   onAdd(environment: string, name: string): void;
 }) {
   const envName = (slug: string) => grid.environments.find((e) => e.slug === slug)?.name ?? slug;
@@ -54,7 +55,7 @@ export function CompareGrid({
                         </span>
                       )
                     ) : (
-                      <button type="button" className="cell-btn" onClick={() => onOpen(c.environment, row.name)} title={c.label} aria-label={c.label}>
+                      <button type="button" className="cell-btn" onClick={() => c.secret && onOpen(c.environment, c.secret)} title={c.label} aria-label={c.label}>
                         <span className="dot" aria-hidden="true">
                           ●
                         </span>

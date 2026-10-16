@@ -6,6 +6,8 @@
 export interface CompareCellIn {
   environment: string;
   missing: boolean;
+  /** The secret's ID in this environment; null when missing. */
+  secret?: string | null;
   group?: number | null;
 }
 
@@ -20,6 +22,8 @@ export interface CellView {
   label: string;
   /** For "same": the environment whose value this cell repeats. */
   sameAs?: string;
+  /** The secret's ID in this environment, for opening it. */
+  secret: string | null;
 }
 
 /**
@@ -41,7 +45,7 @@ export function describeRow(name: string, cells: CompareCellIn[]): CellView[] {
 
   return cells.map((c) => {
     if (c.missing) {
-      return { environment: c.environment, kind: "missing", text: "—", label: `${name} is missing in ${c.environment}` };
+      return { environment: c.environment, kind: "missing", text: "—", label: `${name} is missing in ${c.environment}`, secret: null };
     }
     const g = c.group ?? -1;
     const first = firstOfGroup.get(g);
@@ -52,6 +56,7 @@ export function describeRow(name: string, cells: CompareCellIn[]): CellView[] {
         text: `● =${first}`,
         label: `${name} in ${c.environment} has the same value as in ${first}`,
         sameAs: first,
+        secret: c.secret ?? null,
       };
     }
     firstOfGroup.set(g, c.environment);
@@ -61,8 +66,9 @@ export function describeRow(name: string, cells: CompareCellIn[]): CellView[] {
         kind: "different",
         text: "● ≠",
         label: `${name} in ${c.environment} differs from every other environment`,
+        secret: c.secret ?? null,
       };
     }
-    return { environment: c.environment, kind: "set", text: "●", label: `${name} is set in ${c.environment}` };
+    return { environment: c.environment, kind: "set", text: "●", label: `${name} is set in ${c.environment}`, secret: c.secret ?? null };
   });
 }

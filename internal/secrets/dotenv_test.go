@@ -32,7 +32,7 @@ URL=postgres://u:p@host:5432/db?sslmode=require
 BAD-NAME=nope
 no equals sign here
 UNTERMINATED_AFTER="ok" trailing
-deleted=reserved
+deleted=not reserved
 DUP=first
 DUP=second
 `
@@ -51,6 +51,7 @@ func TestParseDotenvFixture(t *testing.T) {
 		"SINGLE": `single $NOT_EXPANDED \n kept`, "ESCAPES": "line1\nline2\ttab \"quoted\" back\\slash $dollar",
 		"MULTI": "first line\nsecond line\nthird line", "MULTI_SINGLE": "a\nb", "QUOTED_THEN_COMMENT": "v",
 		"EMPTY": "", "EMPTY_QUOTED": "", "URL": "postgres://u:p@host:5432/db?sslmode=require", "DUP": "second",
+		"deleted": "not reserved",
 	}
 	if !reflect.DeepEqual(got, want) {
 		for k, v := range want {
@@ -71,7 +72,7 @@ func TestParseDotenvFixture(t *testing.T) {
 	for _, r := range rejected {
 		reasons = append(reasons, r.Name+"@"+strconv.Itoa(r.Line))
 	}
-	wantRejected := []string{"1BAD@20", "BAD-NAME@21", "@22", "UNTERMINATED_AFTER@23", "deleted@24"}
+	wantRejected := []string{"1BAD@20", "BAD-NAME@21", "@22", "UNTERMINATED_AFTER@23"}
 	if strings.Join(reasons, " ") != strings.Join(wantRejected, " ") {
 		t.Errorf("rejected = %v, want %v", reasons, wantRejected)
 	}
@@ -109,12 +110,12 @@ func TestFormatShell(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
-	for _, n := range []string{"A", "_x", "DATABASE_URL", "a1", strings.Repeat("A", 256)} {
+	for _, n := range []string{"A", "_x", "DATABASE_URL", "a1", strings.Repeat("A", 256), "values", "export"} {
 		if ValidateName(n) != nil {
 			t.Errorf("%q rejected", n)
 		}
 	}
-	for _, n := range []string{"", "1A", "A-B", "A B", strings.Repeat("A", 257), "values", "export"} {
+	for _, n := range []string{"", "1A", "A-B", "A B", strings.Repeat("A", 257), "0190a3c2-0000-7000-8000-000000000000"} {
 		if ValidateName(n) == nil {
 			t.Errorf("%q accepted", n)
 		}

@@ -322,6 +322,7 @@ type CurrentValue struct {
 
 // CompareCell is one environment's current MAC for one secret name.
 type CompareCell struct {
+	SecretID      string
 	EnvironmentID string
 	Name          string
 	ValueMAC      []byte

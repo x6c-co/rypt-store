@@ -950,7 +950,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Names, comments, versions and timestamps; no values. */
+        /** IDs, names, comments, versions and timestamps; no values. */
         get: operations["listSecrets"];
         put?: never;
         post: operations["createSecret"];
@@ -960,7 +960,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}": {
+    "/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}": {
         parameters: {
             query?: never;
             header?: never;
@@ -971,7 +971,8 @@ export interface paths {
                 project: components["parameters"]["ProjectSlug"];
                 /** @description Environment slug. */
                 environment: components["parameters"]["EnvironmentSlug"];
-                name: components["parameters"]["SecretNamePath"];
+                /** @description The secret's ID (a UUID). Names are not used in paths; filter the list by name to find an ID. */
+                secret: components["parameters"]["SecretId"];
             };
             cookie?: never;
         };
@@ -985,7 +986,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions": {
+    "/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions": {
         parameters: {
             query?: never;
             header?: never;
@@ -996,7 +997,8 @@ export interface paths {
                 project: components["parameters"]["ProjectSlug"];
                 /** @description Environment slug. */
                 environment: components["parameters"]["EnvironmentSlug"];
-                name: components["parameters"]["SecretNamePath"];
+                /** @description The secret's ID (a UUID). Names are not used in paths; filter the list by name to find an ID. */
+                secret: components["parameters"]["SecretId"];
             };
             cookie?: never;
         };
@@ -1009,7 +1011,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions/{version}": {
+    "/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions/{version}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1020,7 +1022,8 @@ export interface paths {
                 project: components["parameters"]["ProjectSlug"];
                 /** @description Environment slug. */
                 environment: components["parameters"]["EnvironmentSlug"];
-                name: components["parameters"]["SecretNamePath"];
+                /** @description The secret's ID (a UUID). Names are not used in paths; filter the list by name to find an ID. */
+                secret: components["parameters"]["SecretId"];
                 version: number;
             };
             cookie?: never;
@@ -1034,7 +1037,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions/{version}/restore": {
+    "/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions/{version}/restore": {
         parameters: {
             query?: never;
             header?: never;
@@ -1045,7 +1048,8 @@ export interface paths {
                 project: components["parameters"]["ProjectSlug"];
                 /** @description Environment slug. */
                 environment: components["parameters"]["EnvironmentSlug"];
-                name: components["parameters"]["SecretNamePath"];
+                /** @description The secret's ID (a UUID). Names are not used in paths; filter the list by name to find an ID. */
+                secret: components["parameters"]["SecretId"];
                 version: number;
             };
             cookie?: never;
@@ -1663,6 +1667,8 @@ export interface components {
             /** @description Environment slug. */
             environment: string;
             missing: boolean;
+            /** @description The secret's ID in this environment; null when missing. */
+            secret?: string | null;
             /** @description Cells in the row with equal values share a group label; labels mean nothing outside the row. */
             group?: number | null;
         };
@@ -1713,7 +1719,8 @@ export interface components {
         ProjectSlug: string;
         /** @description Environment slug. */
         EnvironmentSlug: string;
-        SecretNamePath: string;
+        /** @description The secret's ID (a UUID). Names are not used in paths; filter the list by name to find an ID. */
+        SecretId: string;
         Limit: number;
         Cursor: string;
         /** @description Actor ID. */
@@ -3372,6 +3379,8 @@ export interface operations {
             query?: {
                 limit?: components["parameters"]["Limit"];
                 cursor?: components["parameters"]["Cursor"];
+                /** @description Return only the live secret with exactly this name (zero or one item). */
+                name?: string;
             };
             header?: never;
             path: {
@@ -3449,7 +3458,8 @@ export interface operations {
                 project: components["parameters"]["ProjectSlug"];
                 /** @description Environment slug. */
                 environment: components["parameters"]["EnvironmentSlug"];
-                name: components["parameters"]["SecretNamePath"];
+                /** @description The secret's ID (a UUID). Names are not used in paths; filter the list by name to find an ID. */
+                secret: components["parameters"]["SecretId"];
             };
             cookie?: never;
         };
@@ -3482,7 +3492,8 @@ export interface operations {
                 project: components["parameters"]["ProjectSlug"];
                 /** @description Environment slug. */
                 environment: components["parameters"]["EnvironmentSlug"];
-                name: components["parameters"]["SecretNamePath"];
+                /** @description The secret's ID (a UUID). Names are not used in paths; filter the list by name to find an ID. */
+                secret: components["parameters"]["SecretId"];
             };
             cookie?: never;
         };
@@ -3519,7 +3530,8 @@ export interface operations {
                 project: components["parameters"]["ProjectSlug"];
                 /** @description Environment slug. */
                 environment: components["parameters"]["EnvironmentSlug"];
-                name: components["parameters"]["SecretNamePath"];
+                /** @description The secret's ID (a UUID). Names are not used in paths; filter the list by name to find an ID. */
+                secret: components["parameters"]["SecretId"];
             };
             cookie?: never;
         };
@@ -3546,7 +3558,8 @@ export interface operations {
                 project: components["parameters"]["ProjectSlug"];
                 /** @description Environment slug. */
                 environment: components["parameters"]["EnvironmentSlug"];
-                name: components["parameters"]["SecretNamePath"];
+                /** @description The secret's ID (a UUID). Names are not used in paths; filter the list by name to find an ID. */
+                secret: components["parameters"]["SecretId"];
             };
             cookie?: never;
         };
@@ -3577,7 +3590,8 @@ export interface operations {
                 project: components["parameters"]["ProjectSlug"];
                 /** @description Environment slug. */
                 environment: components["parameters"]["EnvironmentSlug"];
-                name: components["parameters"]["SecretNamePath"];
+                /** @description The secret's ID (a UUID). Names are not used in paths; filter the list by name to find an ID. */
+                secret: components["parameters"]["SecretId"];
                 version: number;
             };
             cookie?: never;
@@ -3607,7 +3621,8 @@ export interface operations {
                 project: components["parameters"]["ProjectSlug"];
                 /** @description Environment slug. */
                 environment: components["parameters"]["EnvironmentSlug"];
-                name: components["parameters"]["SecretNamePath"];
+                /** @description The secret's ID (a UUID). Names are not used in paths; filter the list by name to find an ID. */
+                secret: components["parameters"]["SecretId"];
                 version: number;
             };
             cookie?: never;

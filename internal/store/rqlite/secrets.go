@@ -202,7 +202,7 @@ func (s *Store) ListCurrentValues(ctx context.Context, tenantID, envID string) (
 }
 
 func (s *Store) ListCompareCells(ctx context.Context, tenantID, projectID string) ([]store.CompareCell, error) {
-	r, err := s.query(ctx, store.Weak, `SELECT s.environment_id, s.name, v.value_mac
+	r, err := s.query(ctx, store.Weak, `SELECT s.id, s.environment_id, s.name, v.value_mac
 		FROM secrets s JOIN secret_versions v ON v.secret_id = s.id AND v.version = s.current_version
 		WHERE s.tenant_id = ? AND s.project_id = ? AND s.deleted_at IS NULL ORDER BY s.name`, tenantID, projectID)
 	if err != nil {
@@ -211,7 +211,7 @@ func (s *Store) ListCompareCells(ctx context.Context, tenantID, projectID string
 	var out []store.CompareCell
 	for r.next() {
 		var c store.CompareCell
-		if err := r.scan(&c.EnvironmentID, &c.Name, &c.ValueMAC); err != nil {
+		if err := r.scan(&c.SecretID, &c.EnvironmentID, &c.Name, &c.ValueMAC); err != nil {
 			return nil, err
 		}
 		out = append(out, c)

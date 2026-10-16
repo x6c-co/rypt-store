@@ -29,22 +29,15 @@ const (
 
 var namePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,255}$`)
 
-// reservedNames collide with fixed paths under .../secrets/ (feature 01 4).
-var reservedNames = map[string]bool{"deleted": true, "export": true, "import": true, "values": true}
-
 // Validation errors.
 var (
 	ErrInvalidName = errors.New("names start with a letter or underscore and contain only letters, digits and underscores (at most 256)")
-	ErrReserved    = errors.New("deleted, export, import and values are reserved names")
 )
 
 // ValidateName checks a secret name.
 func ValidateName(name string) error {
 	if !namePattern.MatchString(name) {
 		return ErrInvalidName
-	}
-	if reservedNames[name] {
-		return ErrReserved
 	}
 	return nil
 }
@@ -126,9 +119,22 @@ func (s *Service) event(t Target, a Actor, action, secretID string, meta map[str
 		TargetID: secretID, ProjectID: t.Project.ID, EnvironmentID: t.Env.ID, Metadata: meta}
 }
 
-// Get returns a live secret by name.
-func (s *Service) Get(ctx context.Context, t Target, name string) (*store.Secret, error) {
+// GetByName returns a live secret by name.
+func (s *Service) GetByName(ctx context.Context, t Target, name string) (*store.Secret, error) {
 	return s.st.GetSecretByName(ctx, t.Tenant.ID, t.Env.ID, name)
+}
+
+// ByID returns a live secret of the target environment by ID. A secret in
+// another environment, or a deleted one, is ErrNotFound.
+func (s *Service) ByID(ctx context.Context, t Target, id string) (*store.Secret, error) {
+	sec, err := s.st.GetSecret(ctx, t.Tenant.ID, id)
+	if err != nil {
+		return nil, err
+	}
+	if sec.EnvironmentID != t.Env.ID || sec.ProjectID != t.Project.ID || sec.DeletedAt != nil {
+		return nil, store.ErrNotFound
+	}
+	return sec, nil
 }
 
 // write seals value as the next version of a secret and stores it. With
@@ -205,15 +211,15 @@ func (s *Service) Create(ctx context.Context, t Target, a Actor, name, value, co
 }
 
 // Update writes a new version when the current version is expected.
-func (s *Service) Update(ctx context.Context, t Target, a Actor, name, value string, comment *string, expected int) (*store.Secret, error) {
-	cur, err := s.Get(ctx, t, name)
+func (s *Service) Update(ctx context.Context, t Target, a Actor, id, value string, comment *string, expected int) (*store.Secret, error) {
+	cur, err := s.ByID(ctx, t, id)
 	if err != nil {
 		return nil, err
 	}
 	if cur.CurrentVersion != expected {
 		return nil, ErrVersionConflict
 	}
-	return s.write(ctx, t, a, cur, name, value, comment, expected, nil, "secret.update", nil)
+	return s.write(ctx, t, a, cur, cur.Name, value, comment, expected, nil, "secret.update", nil)
 }
 
 // open decrypts one version.
@@ -236,8 +242,8 @@ func (s *Service) failedRead(ctx context.Context, t Target, a Actor, action, sec
 }
 
 // Read returns a secret's current value and audits the read (feature 01 3.2).
-func (s *Service) Read(ctx context.Context, t Target, a Actor, name string) (*store.Secret, string, error) {
-	sec, err := s.Get(ctx, t, name)
+func (s *Service) Read(ctx context.Context, t Target, a Actor, id string) (*store.Secret, string, error) {
+	sec, err := s.ByID(ctx, t, id)
 	if err != nil {
 		return nil, "", err
 	}
@@ -245,7 +251,7 @@ func (s *Service) Read(ctx context.Context, t Target, a Actor, name string) (*st
 	if err != nil {
 		return nil, "", err
 	}
-	meta := map[string]any{"name": name, "version": v.Version}
+	meta := map[string]any{"name": sec.Name, "version": v.Version}
 	value, err := s.open(ctx, t, v)
 	if err != nil {
 		s.failedRead(ctx, t, a, "secret.read", sec.ID, meta, err)
@@ -260,8 +266,8 @@ func (s *Service) Read(ctx context.Context, t Target, a Actor, name string) (*st
 
 // ReadVersion returns one version's value; the read is a secret.read with
 // the version in the metadata (feature 01 3.3).
-func (s *Service) ReadVersion(ctx context.Context, t Target, a Actor, name string, version int) (*store.SecretVersion, string, error) {
-	sec, err := s.Get(ctx, t, name)
+func (s *Service) ReadVersion(ctx context.Context, t Target, a Actor, id string, version int) (*store.SecretVersion, string, error) {
+	sec, err := s.ByID(ctx, t, id)
 	if err != nil {
 		return nil, "", err
 	}
@@ -269,7 +275,7 @@ func (s *Service) ReadVersion(ctx context.Context, t Target, a Actor, name strin
 	if err != nil {
 		return nil, "", err
 	}
-	meta := map[string]any{"name": name, "version": version, "current": version == sec.CurrentVersion}
+	meta := map[string]any{"name": sec.Name, "version": version, "current": version == sec.CurrentVersion}
 	value, err := s.open(ctx, t, v)
 	if err != nil {
 		s.failedRead(ctx, t, a, "secret.read", sec.ID, meta, err)
@@ -282,8 +288,8 @@ func (s *Service) ReadVersion(ctx context.Context, t Target, a Actor, name strin
 }
 
 // History lists versions without values.
-func (s *Service) History(ctx context.Context, t Target, name string) (*store.Secret, []store.SecretVersion, error) {
-	sec, err := s.Get(ctx, t, name)
+func (s *Service) History(ctx context.Context, t Target, id string) (*store.Secret, []store.SecretVersion, error) {
+	sec, err := s.ByID(ctx, t, id)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -293,8 +299,8 @@ func (s *Service) History(ctx context.Context, t Target, name string) (*store.Se
 
 // RestoreVersion writes an old version's value as a new version under a
 // fresh DEK (feature 01 3.3).
-func (s *Service) RestoreVersion(ctx context.Context, t Target, a Actor, name string, version int) (*store.Secret, error) {
-	sec, err := s.Get(ctx, t, name)
+func (s *Service) RestoreVersion(ctx context.Context, t Target, a Actor, id string, version int) (*store.Secret, error) {
+	sec, err := s.ByID(ctx, t, id)
 	if err != nil {
 		return nil, err
 	}
@@ -306,17 +312,17 @@ func (s *Service) RestoreVersion(ctx context.Context, t Target, a Actor, name st
 	if err != nil {
 		return nil, err
 	}
-	return s.write(ctx, t, a, sec, name, value, nil, sec.CurrentVersion, &version, "secret.version.restore",
+	return s.write(ctx, t, a, sec, sec.Name, value, nil, sec.CurrentVersion, &version, "secret.version.restore",
 		map[string]any{"restored_from": version})
 }
 
 // Delete soft-deletes a secret (feature 01 3.5).
-func (s *Service) Delete(ctx context.Context, t Target, a Actor, name string) error {
-	sec, err := s.Get(ctx, t, name)
+func (s *Service) Delete(ctx context.Context, t Target, a Actor, id string) error {
+	sec, err := s.ByID(ctx, t, id)
 	if err != nil {
 		return err
 	}
-	return s.audit.Record(ctx, s.event(t, a, "secret.delete", sec.ID, map[string]any{"name": name, "version": sec.CurrentVersion}),
+	return s.audit.Record(ctx, s.event(t, a, "secret.delete", sec.ID, map[string]any{"name": sec.Name, "version": sec.CurrentVersion}),
 		func(ev *store.AuditEvent) error {
 			return s.st.SoftDeleteSecret(ctx, t.Tenant.ID, sec.ID, s.now().UTC(), ev)
 		})
@@ -396,7 +402,7 @@ func (s *Service) Import(ctx context.Context, t Target, a Actor, src string, ove
 		res.Rejected = []Rejection{}
 	}
 	for _, e := range entries {
-		cur, err := s.Get(ctx, t, e.Name)
+		cur, err := s.GetByName(ctx, t, e.Name)
 		switch {
 		case errors.Is(err, store.ErrNotFound):
 			if _, err := s.write(ctx, t, a, nil, e.Name, e.Value, ptr(""), 0, nil, "secret.create", map[string]any{"via": "import"}); err != nil {
@@ -444,11 +450,13 @@ func (s *Service) sameValue(ctx context.Context, t Target, sec *store.Secret, va
 	return bytes.Equal(mac, v.ValueMAC), nil
 }
 
-// CompareRow is one secret name across environments; Groups maps an
-// environment ID to the row-local label of its value, absent when missing.
+// CompareRow is one secret name across environments. Groups maps an
+// environment ID to the row-local label of its value and IDs to the
+// secret's ID there; both are absent when the secret is missing.
 type CompareRow struct {
 	Name   string
 	Groups map[string]int
+	IDs    map[string]string
 }
 
 // Compare builds the Compare grid (feature 01 3.6). Environments whose
@@ -459,24 +467,26 @@ func (s *Service) Compare(ctx context.Context, tenantID, projectID string, envs 
 	if err != nil {
 		return nil, err
 	}
-	byName := map[string]map[string][]byte{}
+	byName := map[string]map[string]store.CompareCell{}
 	var names []string
 	for _, c := range cells {
 		if byName[c.Name] == nil {
-			byName[c.Name] = map[string][]byte{}
+			byName[c.Name] = map[string]store.CompareCell{}
 			names = append(names, c.Name)
 		}
-		byName[c.Name][c.EnvironmentID] = c.ValueMAC
+		byName[c.Name][c.EnvironmentID] = c
 	}
 	rows := make([]CompareRow, 0, len(names))
 	for _, n := range names {
-		row := CompareRow{Name: n, Groups: map[string]int{}}
+		row := CompareRow{Name: n, Groups: map[string]int{}, IDs: map[string]string{}}
 		var seen [][]byte
 		for _, e := range envs {
-			mac, ok := byName[n][e.ID]
+			cell, ok := byName[n][e.ID]
 			if !ok {
 				continue
 			}
+			mac := cell.ValueMAC
+			row.IDs[e.ID] = cell.SecretID
 			label := 0
 			for i, m := range seen {
 				if bytes.Equal(m, mac) {

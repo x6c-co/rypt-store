@@ -14,7 +14,7 @@ export const qk = {
   compare: (t: string, p: string) => ["tenants", t, "projects", p, "compare"] as const,
   secrets: (t: string, p: string, e: string) => ["tenants", t, "projects", p, "env", e, "secrets"] as const,
   deleted: (t: string, p: string, e: string) => ["tenants", t, "projects", p, "env", e, "deleted"] as const,
-  versions: (t: string, p: string, e: string, n: string) => ["tenants", t, "projects", p, "env", e, "versions", n] as const,
+  versions: (t: string, p: string, e: string, secret: string) => ["tenants", t, "projects", p, "env", e, "versions", secret] as const,
   tokens: (t: string, p: string) => ["tenants", t, "projects", p, "tokens"] as const,
   members: (t: string) => ["tenants", t, "members"] as const,
   invitations: (t: string) => ["tenants", t, "invitations"] as const,
@@ -105,16 +105,17 @@ export function useDeletedSecrets(tenant: string, project: string, environment: 
   });
 }
 
-export function useVersions(tenant: string, project: string, environment: string, name: string | null) {
+/** Versions of one secret, by secret ID. */
+export function useVersions(tenant: string, project: string, environment: string, secret: string | null) {
   return useQuery({
-    queryKey: qk.versions(tenant, project, environment, name ?? ""),
+    queryKey: qk.versions(tenant, project, environment, secret ?? ""),
     queryFn: () =>
       call(
-        api.GET("/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}/versions", {
-          params: { path: { tenant, project, environment, name: name! } },
+        api.GET("/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}/versions", {
+          params: { path: { tenant, project, environment, secret: secret! } },
         }),
       ),
-    enabled: !!name,
+    enabled: !!secret,
   });
 }
 

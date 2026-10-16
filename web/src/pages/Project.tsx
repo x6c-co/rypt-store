@@ -7,7 +7,7 @@ import { ApiError, errorMessage } from "../api/errors";
 import { projectPrefix, qk, useCompare, useProject, useProjects, useSecrets, useSetupStatus } from "../api/queries";
 import { CompareGrid, CompareLegend } from "../components/CompareGrid";
 import { ConfirmByName, Modal } from "../components/Dialog";
-import { actorName, HistoryDrawer, ImportDialog, RecentlyDeletedDialog, SecretEditor } from "../components/secrets";
+import { actorName, HistoryDrawer, ImportDialog, RecentlyDeletedDialog, SecretEditor, type EditorTarget, type SecretRef } from "../components/secrets";
 import { useToast } from "../components/Toast";
 import { Button, EmptyState, ErrorNotice, Loading, SelectField, TextField } from "../components/ui";
 import { can, type Role } from "../lib/authz";
@@ -206,7 +206,7 @@ export function ProjectLayout() {
   const { tenant = "", project: slug = "" } = useParams();
   const role = useRole(tenant);
   const project = useProject(tenant, slug);
-  const [editor, setEditor] = useState<{ mode: "create"; environment: string; name?: string } | null>(null);
+  const [editor, setEditor] = useState<EditorTarget | null>(null);
 
   if (project.isPending) return <Loading />;
   if (project.isError) return <ErrorNotice error={project.error} />;
@@ -283,7 +283,7 @@ export function ComparePage() {
       <CompareGrid
         grid={grid.data}
         canWrite={can(role, "secret.write")}
-        onOpen={(env, name) => navigate(`/t/${tenant}/p/${project.slug}/e/${env}?secret=${encodeURIComponent(name)}`)}
+        onOpen={(env, secret) => navigate(`/t/${tenant}/p/${project.slug}/e/${env}?secret=${encodeURIComponent(secret)}`)}
         onAdd={(env, name) => openAdd(env, name)}
       />
     </div>
@@ -295,35 +295,36 @@ export function EnvironmentPage() {
   const { tenant, project, role, openAdd } = useProjectContext();
   const { env = "" } = useParams();
   const [params] = useSearchParams();
-  const focusName = params.get("secret");
+  // ?secret=<id> opens the environment with that secret highlighted.
+  const focusId = params.get("secret");
   const qc = useQueryClient();
   const toast = useToast();
   const environment = project.environments.find((e) => e.slug === env);
   const secrets = useSecrets(tenant, project.slug, env);
   const { revealed, reveal, hide, hideAll } = useReveal();
-  const [editing, setEditing] = useState<string | null>(null);
-  const [history, setHistory] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState<string | null>(null);
+  const [editing, setEditing] = useState<SecretRef | null>(null);
+  const [history, setHistory] = useState<SecretRef | null>(null);
+  const [deleting, setDeleting] = useState<SecretRef | null>(null);
   const [importing, setImporting] = useState(false);
   const [showDeleted, setShowDeleted] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const canWrite = can(role, "secret.write");
-  const editorTarget = useMemo(() => (editing ? { mode: "edit" as const, environment: env, name: editing } : null), [editing, env]);
+  const editorTarget = useMemo<EditorTarget | null>(() => (editing ? { mode: "edit", environment: env, secret: editing } : null), [editing, env]);
 
   useEffect(() => hideAll(), [env, hideAll]);
   useEffect(() => {
-    if (!focusName || !secrets.data) return;
-    document.getElementById(`secret-${focusName}`)?.scrollIntoView({ block: "center" });
-  }, [focusName, secrets.data]);
+    if (!focusId || !secrets.data) return;
+    document.getElementById(`secret-${focusId}`)?.scrollIntoView({ block: "center" });
+  }, [focusId, secrets.data]);
 
   if (!environment) return <ErrorNotice error={new Error(`There is no environment ${env} in ${project.name}.`)} />;
   const envName = environment.name;
 
-  const fetchValue = async (name: string) =>
+  const fetchValue = async (secret: string) =>
     (
       await call(
-        api.GET("/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}", {
-          params: { path: { tenant, project: project.slug, environment: env, name } },
+        api.GET("/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}", {
+          params: { path: { tenant, project: project.slug, environment: env, secret } },
         }),
       )
     ).value;
@@ -411,9 +412,10 @@ export function EnvironmentPage() {
             </thead>
             <tbody>
               {secrets.data.map((s) => {
-                const shown = s.name in revealed;
+                const shown = s.id in revealed;
+                const ref = { id: s.id, name: s.name };
                 return (
-                  <tr key={s.id} id={`secret-${s.name}`} className={focusName === s.name ? "highlight" : undefined}>
+                  <tr key={s.id} id={`secret-${s.id}`} className={focusId === s.id ? "highlight" : undefined}>
                     <td className="mono">
                       {s.name}
                       {s.comment && <div className="secret-comment">{s.comment}</div>}
@@ -421,7 +423,7 @@ export function EnvironmentPage() {
                     <td className="value-cell mono">
                       {shown ? (
                         <span className="value-revealed" data-testid={`value-${s.name}`}>
-                          {revealed[s.name]}
+                          {revealed[s.id]}
                         </span>
                       ) : (
                         <span className="value-masked" aria-label="Hidden value">
@@ -437,26 +439,26 @@ export function EnvironmentPage() {
                     <td className="actions">
                       <div className="row" style={{ justifyContent: "flex-end", flexWrap: "nowrap" }}>
                         {shown ? (
-                          <Button size="sm" onClick={() => hide(s.name)} aria-label={`Hide ${s.name}`}>
+                          <Button size="sm" onClick={() => hide(s.id)} aria-label={`Hide ${s.name}`}>
                             Hide
                           </Button>
                         ) : (
                           <Button
                             size="sm"
-                            busy={busy === `reveal-${s.name}`}
+                            busy={busy === `reveal-${s.id}`}
                             aria-label={`Reveal ${s.name}`}
-                            onClick={() => act(`reveal-${s.name}`, async () => reveal(s.name, await fetchValue(s.name)))}
+                            onClick={() => act(`reveal-${s.id}`, async () => reveal(s.id, await fetchValue(s.id)))}
                           >
                             Reveal
                           </Button>
                         )}
                         <Button
                           size="sm"
-                          busy={busy === `copy-${s.name}`}
+                          busy={busy === `copy-${s.id}`}
                           aria-label={`Copy ${s.name}`}
                           onClick={() =>
-                            act(`copy-${s.name}`, async () => {
-                              await copyText(await fetchValue(s.name));
+                            act(`copy-${s.id}`, async () => {
+                              await copyText(await fetchValue(s.id));
                               toast.show(`Copied ${s.name}.`);
                             })
                           }
@@ -464,15 +466,15 @@ export function EnvironmentPage() {
                           Copy
                         </Button>
                         {canWrite && (
-                          <Button size="sm" aria-label={`Edit ${s.name}`} onClick={() => setEditing(s.name)}>
+                          <Button size="sm" aria-label={`Edit ${s.name}`} onClick={() => setEditing(ref)}>
                             Edit
                           </Button>
                         )}
-                        <Button size="sm" aria-label={`History of ${s.name}`} onClick={() => setHistory(s.name)}>
+                        <Button size="sm" aria-label={`History of ${s.name}`} onClick={() => setHistory(ref)}>
                           History
                         </Button>
                         {canWrite && (
-                          <Button size="sm" variant="ghost" aria-label={`Delete ${s.name}`} onClick={() => setDeleting(s.name)}>
+                          <Button size="sm" variant="ghost" aria-label={`Delete ${s.name}`} onClick={() => setDeleting(ref)}>
                             Delete
                           </Button>
                         )}
@@ -487,7 +489,7 @@ export function EnvironmentPage() {
       )}
 
       <SecretEditor tenant={tenant} project={project.slug} environments={project.environments} target={editorTarget} onClose={() => setEditing(null)} />
-      <HistoryDrawer tenant={tenant} project={project.slug} environment={env} name={history} canWrite={canWrite} onClose={() => setHistory(null)} />
+      <HistoryDrawer tenant={tenant} project={project.slug} environment={env} secret={history} canWrite={canWrite} onClose={() => setHistory(null)} />
       <ImportDialog tenant={tenant} project={project.slug} environment={env} envName={envName} open={importing} onOpenChange={setImporting} />
       <RecentlyDeletedDialog
         tenant={tenant}
@@ -502,17 +504,17 @@ export function EnvironmentPage() {
         open={!!deleting}
         onOpenChange={(o) => !o && setDeleting(null)}
         title="Delete secret"
-        description={`${deleting} moves to Recently deleted in ${envName} and can be restored until it is purged.`}
-        name={deleting ?? ""}
+        description={`${deleting?.name} moves to Recently deleted in ${envName} and can be restored until it is purged.`}
+        name={deleting?.name ?? ""}
         action="Delete secret"
         onConfirm={async () => {
-          const name = deleting!;
+          const { id, name } = deleting!;
           await call(
-            api.DELETE("/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{name}", {
-              params: { path: { tenant, project: project.slug, environment: env, name } },
+            api.DELETE("/api/v1/tenants/{tenant}/projects/{project}/environments/{environment}/secrets/{secret}", {
+              params: { path: { tenant, project: project.slug, environment: env, secret: id } },
             }),
           );
-          hide(name);
+          hide(id);
           toast.show(`Deleted ${name}.`);
           await qc.invalidateQueries({ queryKey: projectPrefix(tenant, project.slug) });
         }}
