@@ -89,6 +89,7 @@ type CompleteSetupParams struct {
 type UserStore interface {
 	GetUser(ctx context.Context, id string) (*User, error)
 	GetUserByEmail(ctx context.Context, email string) (*User, error)
+	ListUsers(ctx context.Context) ([]User, error)
 	UpdateUserPassword(ctx context.Context, userID, hash string, at time.Time, ev *AuditEvent) error
 
 	GetTOTP(ctx context.Context, userID string) (*TOTP, error)

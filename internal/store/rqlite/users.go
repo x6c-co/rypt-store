@@ -93,6 +93,22 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (*store.User, 
 	return s.getUser(ctx, "email = ?", email)
 }
 
+func (s *Store) ListUsers(ctx context.Context) ([]store.User, error) {
+	r, err := s.query(ctx, store.Weak, "SELECT "+userCols+" FROM users ORDER BY email")
+	if err != nil {
+		return nil, err
+	}
+	var out []store.User
+	for r.next() {
+		u, err := scanUser(r)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *u)
+	}
+	return out, nil
+}
+
 func (s *Store) UpdateUserPassword(ctx context.Context, userID, hash string, at time.Time, ev *store.AuditEvent) error {
 	var b batch
 	b.audit(ev)

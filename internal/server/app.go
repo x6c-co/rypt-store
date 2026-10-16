@@ -157,7 +157,33 @@ func (a *App) registerJobs() {
 		}
 		return a.Store.DeleteExpiredDeviceAuth(ctx, now)
 	})
+	a.Jobs.Every("audit-retention", 6*time.Hour, true, a.pruneAudit)
+	a.Jobs.Every("retired-wraps", time.Hour, false, func(ctx context.Context) error {
+		_, err := a.Store.DeleteRetiredWraps(ctx, time.Now().UTC().Add(-a.Config.Keys.RetiredWrapRetention.D()))
+		return err
+	})
 	a.Jobs.Every("job-cleanup", time.Hour, false, func(ctx context.Context) error {
 		return a.Store.DeleteFinishedJobs(ctx, time.Now().UTC().Add(-7*24*time.Hour))
 	})
+}
+
+// pruneAudit applies audit.retention_days to every chain (core 8.5).
+func (a *App) pruneAudit(ctx context.Context) error {
+	days := a.Config.Audit.RetentionDays
+	if days <= 0 {
+		return nil
+	}
+	chains, err := a.Store.ListAuditChains(ctx)
+	if err != nil {
+		return err
+	}
+	before := time.Now().UTC().Add(-time.Duration(days) * 24 * time.Hour)
+	for _, c := range chains {
+		if n, err := a.Audit.Prune(ctx, c.ChainID, before); err != nil {
+			return fmt.Errorf("prune chain %s: %w", c.ChainID, err)
+		} else if n > 0 {
+			a.Log.Info("pruned audit events", "chain", c.ChainID, "deleted", n)
+		}
+	}
+	return nil
 }
