@@ -204,6 +204,9 @@ type KeyStore interface {
 	// RK already exists.
 	CreateRootKey(ctx context.Context, w KeyWrap) error
 	InsertWraps(ctx context.Context, wraps []KeyWrap) error
+	// DeletePendingWraps deletes pending wraps left by an interrupted
+	// migration: a project's, or the instance keys' when projectID is empty.
+	DeletePendingWraps(ctx context.Context, projectID string) (int, error)
 	DeleteWraps(ctx context.Context, ids []string) error
 	// FlipWraps, in one batch, retires the given active wraps, activates the
 	// given pending wraps, and sets the project's key mode when newMode is

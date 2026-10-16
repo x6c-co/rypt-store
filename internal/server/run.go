@@ -148,6 +148,9 @@ func serve(ctx context.Context, app *App, tm *tlsmgr.Manager, opts Options) erro
 		}
 	}
 
+	if err := app.Migrator.Resume(ctx); err != nil {
+		log.Error("resume key migrations", "error", err.Error())
+	}
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -167,6 +170,7 @@ func serve(ctx context.Context, app *App, tm *tlsmgr.Manager, opts Options) erro
 		_ = s.Shutdown(shutdown)
 	}
 	cancel()
+	app.Migrator.Stop()
 	wg.Wait()
 	_ = app.Keys.FlushOpCounts(shutdown)
 	return runErr

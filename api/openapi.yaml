@@ -1914,14 +1914,15 @@ components:
       required: [kind]
       properties:
         kind: { type: string, enum: [provider, mode, rotate] }
-        params:
-          type: object
-          properties:
-            to: { type: string, description: "provider: the target provider." }
-            tenant: { type: string, description: "mode: tenant slug." }
-            project: { type: string, description: "mode: project slug." }
-            mode: { $ref: "#/components/schemas/KeyMode" }
+        params: { $ref: "#/components/schemas/KeyMigrationParams" }
         dry_run: { type: boolean, default: false }
+    KeyMigrationParams:
+      type: object
+      properties:
+        to: { type: string, description: "provider: the target provider." }
+        tenant: { type: string, description: "mode: tenant slug." }
+        project: { type: string, description: "mode: project slug." }
+        mode: { $ref: "#/components/schemas/KeyMode" }
     MigrationEstimate:
       type: object
       required: [kind, total_ops, projects]

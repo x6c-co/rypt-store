@@ -68,6 +68,18 @@ func (s *Store) InsertWraps(ctx context.Context, wraps []store.KeyWrap) error {
 	return s.execBatch(ctx, b)
 }
 
+func (s *Store) DeletePendingWraps(ctx context.Context, projectID string) (int, error) {
+	q, args := "DELETE FROM key_wraps WHERE state = 'pending' AND project_id = ?", []any{projectID}
+	if projectID == "" {
+		q, args = "DELETE FROM key_wraps WHERE state = 'pending' AND project_id IS NULL", nil
+	}
+	n, err := s.exec(ctx, st(q, args...))
+	if err != nil {
+		return 0, err
+	}
+	return int(n[0]), nil
+}
+
 func (s *Store) DeleteWraps(ctx context.Context, wrapIDs []string) error {
 	var b batch
 	for _, chunk := range chunks(wrapIDs, 500) {

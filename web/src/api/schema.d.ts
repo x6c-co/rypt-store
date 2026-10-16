@@ -1565,17 +1565,18 @@ export interface components {
         KeyMigrationRequest: {
             /** @enum {string} */
             kind: "provider" | "mode" | "rotate";
-            params?: {
-                /** @description provider: the target provider. */
-                to?: string;
-                /** @description mode: tenant slug. */
-                tenant?: string;
-                /** @description mode: project slug. */
-                project?: string;
-                mode?: components["schemas"]["KeyMode"];
-            };
+            params?: components["schemas"]["KeyMigrationParams"];
             /** @default false */
             dry_run: boolean;
+        };
+        KeyMigrationParams: {
+            /** @description provider: the target provider. */
+            to?: string;
+            /** @description mode: tenant slug. */
+            tenant?: string;
+            /** @description mode: project slug. */
+            project?: string;
+            mode?: components["schemas"]["KeyMode"];
         };
         MigrationEstimate: {
             kind: string;
@@ -1599,7 +1600,7 @@ export interface components {
             projects_total: number;
             projects_done: number;
             error?: string | null;
-            started_by?: string;
+            started_by: string;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */

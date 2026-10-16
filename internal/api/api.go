@@ -57,8 +57,6 @@ type Deps struct {
 
 // Handlers implements gen.StrictServerInterface.
 type Handlers struct {
-	unimplemented
-
 	d Deps
 
 	setupDone   atomic.Bool

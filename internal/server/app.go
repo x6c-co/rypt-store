@@ -30,6 +30,7 @@ type App struct {
 	API      *api.Handlers
 	Jobs     *jobs.Runner
 	Secrets  *secrets.Service
+	Migrator *keys.Migrator
 	Metrics  *metrics.Metrics
 	Log      *slog.Logger
 	Handler  http.Handler
@@ -133,9 +134,11 @@ func NewApp(ctx context.Context, o AppOptions) (*App, error) {
 	sec := secrets.New(secrets.Options{Store: o.Store, Keys: ks, Audit: aw, Jobs: runner, VersionsKept: cfg.Secrets.VersionsKept,
 		DeletedRetention: cfg.Secrets.DeletedRetention.D(), Now: now})
 	runner.Handle(secrets.JobPrune, sec.PruneJob)
+	migrator := keys.NewMigrator(ks, o.Store, aw, log)
 	h := api.New(api.Deps{
 		Store: o.Store, Keys: ks, Audit: aw, Config: cfg, WebAuthn: wa, TOTP: authn.NewTOTPVerifier(now), Secrets: sec,
-		Limiter: authn.NewLoginLimiter(now), Sessions: policy, Jobs: runner, Metrics: m, Logger: log, Now: now,
+		Migrations: migrator,
+		Limiter:    authn.NewLoginLimiter(now), Sessions: policy, Jobs: runner, Metrics: m, Logger: log, Now: now,
 	})
 	h.SetSetupDone(inst.SetupCompletedAt != nil)
 	mode := cfg.EffectiveTLSMode()
@@ -147,7 +150,7 @@ func NewApp(ctx context.Context, o AppOptions) (*App, error) {
 			authn.CLISessionAuthenticator{Store: o.Store, Policy: policy},
 		},
 	})
-	app := &App{Config: cfg, Store: o.Store, Keys: ks, Audit: aw, API: h, Jobs: runner, Secrets: sec, Metrics: m, Log: log,
+	app := &App{Config: cfg, Store: o.Store, Keys: ks, Audit: aw, API: h, Jobs: runner, Secrets: sec, Migrator: migrator, Metrics: m, Log: log,
 		Handler: handler, Instance: inst}
 	app.registerJobs()
 	return app, nil

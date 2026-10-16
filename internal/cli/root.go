@@ -75,7 +75,7 @@ func addCommands(root *cobra.Command, e *env) *cobra.Command {
 	pf.StringVar(&g.caFile, "ca-file", "", "PEM file of the CA (or self-signed certificate) to trust")
 	pf.BoolVar(&g.insecure, "insecure", false, "skip TLS verification (testing only)")
 	root.AddCommand(serverCmd(), loginCmd(e, g), logoutCmd(e, g), initCmd(e, g), secretsCmd(e, g),
-		importCmd(e, g), exportCmd(e, g), runCmd(e, g), tokensCmd(e, g), auditCmd(e, g))
+		importCmd(e, g), exportCmd(e, g), runCmd(e, g), tokensCmd(e, g), auditCmd(e, g), keysCmd(e, g))
 	return root
 }
 
