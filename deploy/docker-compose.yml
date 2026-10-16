@@ -7,6 +7,11 @@
 # With no .env this starts a local-provider instance with a self-signed
 # certificate at https://localhost. Needs Docker Compose 2.24 or later (for
 # the optional env_file).
+#
+# The image comes from ghcr.io; set RYPT_STORE_IMAGE_TAG in .env to pin a
+# release or a sha-<commit> tag. To build from this checkout instead:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 name: rypt-store
 
 services:
@@ -23,10 +28,7 @@ services:
       retries: 30
 
   rypt-store:
-    build:
-      context: ..
-      dockerfile: Dockerfile
-    image: rypt-store:local
+    image: ghcr.io/x6c-co/rypt-store:${RYPT_STORE_IMAGE_TAG:-main}
     restart: unless-stopped
     depends_on:
       rqlite:

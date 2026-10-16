@@ -1,0 +1,9 @@
+# Builds the rypt-store image from this checkout instead of pulling it:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+services:
+  rypt-store:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: rypt-store:local

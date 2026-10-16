@@ -71,8 +71,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Compose file is valid
-        run: docker compose -f deploy/docker-compose.yml config --quiet
+      - name: Compose files are valid
+        run: |
+          docker compose -f deploy/docker-compose.yml config --quiet
+          docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.build.yml config --quiet
       - name: Build the image
         run: docker build --build-arg VERSION=${{ github.sha }} -t rypt-store:ci .
 

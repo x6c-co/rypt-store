@@ -22,9 +22,12 @@ The server, the web interface, and the CLI ship as one binary. Data lives in
 
 ```sh
 cd deploy
-docker compose up -d
+docker compose up -d             # pulls ghcr.io/x6c-co/rypt-store:main
 docker compose logs rypt-store   # copy the setup token from the delimited block
 ```
+
+Only `deploy/docker-compose.yml` is needed (and, optionally, a `.env` next to
+it), not the rest of this repository.
 
 Open <https://localhost>, accept the self-signed certificate, and enter the
 setup token. The wizard creates the first admin, enrolls their authenticator
@@ -35,10 +38,12 @@ For a public hostname with a Let's Encrypt certificate, copy
 `deploy/.env.example` to `deploy/.env` and set `RYPT_STORE_TLS_DOMAINS` and
 `RYPT_STORE_TLS_ACME_EMAIL`. Ports 80 and 443 must reach the host.
 
-The compose file builds the image from this checkout. CI also publishes it
-for linux/amd64 and linux/arm64 to `ghcr.io/x6c-co/rypt-store`: `:main` and
-`:sha-<commit>` from the main branch, and `:<version>`, `:<major>.<minor>`,
-and `:latest` from `v*` tags.
+CI publishes the image for linux/amd64 and linux/arm64 to
+`ghcr.io/x6c-co/rypt-store`: `:main` and `:sha-<commit>` from the main branch,
+and `:<version>`, `:<major>.<minor>`, and `:latest` from `v*` tags. Set
+`RYPT_STORE_IMAGE_TAG` in `deploy/.env` to run a tag other than `main`. To
+build the image from a checkout instead, add the build override:
+`docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
 
 ## The CLI
 
