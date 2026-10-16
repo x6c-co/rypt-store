@@ -1,8 +1,12 @@
 # syntax=docker/dockerfile:1
 # rypt-store: Node build of web/, Go build with the SPA embedded, distroless
 # runtime as a non-root user (core 13).
+#
+# The web and Go stages run on the build machine's platform and cross-compile,
+# so a multi-platform build (docker buildx --platform linux/amd64,linux/arm64)
+# needs no emulation: the runtime stage only copies files.
 
-FROM node:24-alpine AS web
+FROM --platform=$BUILDPLATFORM node:24-alpine AS web
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -12,7 +16,7 @@ RUN npm run build
 
 # Pin the patch release: official golang images set GOTOOLCHAIN=local, so the
 # toolchain line in go.mod would not upgrade the standard library here.
-FROM golang:1.27.2-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.27.2-alpine AS build
 WORKDIR /src
 ENV CGO_ENABLED=0
 COPY go.mod go.sum ./
@@ -20,7 +24,8 @@ RUN go mod download
 COPY . .
 COPY --from=web /src/web/dist ./web/dist
 ARG VERSION=dev
-RUN go build -trimpath -ldflags "-s -w -X github.com/x6c-co/rypt-store/internal/version.Version=${VERSION}" \
+ARG TARGETOS TARGETARCH
+RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags "-s -w -X github.com/x6c-co/rypt-store/internal/version.Version=${VERSION}" \
       -o /out/rypt-store ./cmd/rypt-store \
  && mkdir -p /out/data
 

@@ -35,6 +35,11 @@ For a public hostname with a Let's Encrypt certificate, copy
 `deploy/.env.example` to `deploy/.env` and set `RYPT_STORE_TLS_DOMAINS` and
 `RYPT_STORE_TLS_ACME_EMAIL`. Ports 80 and 443 must reach the host.
 
+The compose file builds the image from this checkout. CI also publishes it
+for linux/amd64 and linux/arm64 to `ghcr.io/x6c-co/rypt-store`: `:main` and
+`:sha-<commit>` from the main branch, and `:<version>`, `:<major>.<minor>`,
+and `:latest` from `v*` tags.
+
 ## The CLI
 
 ```sh
