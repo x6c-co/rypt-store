@@ -16,6 +16,7 @@ import (
 	"github.com/x6c-co/rypt-store/internal/keys"
 	"github.com/x6c-co/rypt-store/internal/keys/provider"
 	"github.com/x6c-co/rypt-store/internal/metrics"
+	"github.com/x6c-co/rypt-store/internal/secrets"
 	"github.com/x6c-co/rypt-store/internal/store"
 	"github.com/x6c-co/rypt-store/internal/version"
 )
@@ -28,6 +29,7 @@ type App struct {
 	Audit    *audit.Writer
 	API      *api.Handlers
 	Jobs     *jobs.Runner
+	Secrets  *secrets.Service
 	Metrics  *metrics.Metrics
 	Log      *slog.Logger
 	Handler  http.Handler
@@ -128,8 +130,11 @@ func NewApp(ctx context.Context, o AppOptions) (*App, error) {
 	}
 	policy := authn.SessionPolicy{Idle: cfg.Auth.SessionIdle.D(), Max: cfg.Auth.SessionMax.D(), CLIMax: cfg.Auth.CLISessionMax.D(), Now: now}
 	runner := jobs.New(o.Store, log, now)
+	sec := secrets.New(secrets.Options{Store: o.Store, Keys: ks, Audit: aw, Jobs: runner, VersionsKept: cfg.Secrets.VersionsKept,
+		DeletedRetention: cfg.Secrets.DeletedRetention.D(), Now: now})
+	runner.Handle(secrets.JobPrune, sec.PruneJob)
 	h := api.New(api.Deps{
-		Store: o.Store, Keys: ks, Audit: aw, Config: cfg, WebAuthn: wa, TOTP: authn.NewTOTPVerifier(now),
+		Store: o.Store, Keys: ks, Audit: aw, Config: cfg, WebAuthn: wa, TOTP: authn.NewTOTPVerifier(now), Secrets: sec,
 		Limiter: authn.NewLoginLimiter(now), Sessions: policy, Jobs: runner, Metrics: m, Logger: log, Now: now,
 	})
 	h.SetSetupDone(inst.SetupCompletedAt != nil)
@@ -142,7 +147,8 @@ func NewApp(ctx context.Context, o AppOptions) (*App, error) {
 			authn.CLISessionAuthenticator{Store: o.Store, Policy: policy},
 		},
 	})
-	app := &App{Config: cfg, Store: o.Store, Keys: ks, Audit: aw, API: h, Jobs: runner, Metrics: m, Log: log, Handler: handler, Instance: inst}
+	app := &App{Config: cfg, Store: o.Store, Keys: ks, Audit: aw, API: h, Jobs: runner, Secrets: sec, Metrics: m, Log: log,
+		Handler: handler, Instance: inst}
 	app.registerJobs()
 	return app, nil
 }
@@ -158,6 +164,8 @@ func (a *App) registerJobs() {
 		return a.Store.DeleteExpiredDeviceAuth(ctx, now)
 	})
 	a.Jobs.Every("audit-retention", 6*time.Hour, true, a.pruneAudit)
+	a.Jobs.Every("secret-purge", time.Hour, true, a.Secrets.PurgeSweep)
+	a.Jobs.Every("secret-prune-sweep", 6*time.Hour, true, a.Secrets.PruneSweep)
 	a.Jobs.Every("retired-wraps", time.Hour, false, func(ctx context.Context) error {
 		_, err := a.Store.DeleteRetiredWraps(ctx, time.Now().UTC().Add(-a.Config.Keys.RetiredWrapRetention.D()))
 		return err

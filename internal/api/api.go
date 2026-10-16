@@ -22,6 +22,7 @@ import (
 	"github.com/x6c-co/rypt-store/internal/keys"
 	"github.com/x6c-co/rypt-store/internal/keys/provider"
 	"github.com/x6c-co/rypt-store/internal/metrics"
+	"github.com/x6c-co/rypt-store/internal/secrets"
 	"github.com/x6c-co/rypt-store/internal/store"
 )
 
@@ -48,6 +49,7 @@ type Deps struct {
 	Sessions   authn.SessionPolicy
 	Jobs       Jobs
 	Migrations Migrations
+	Secrets    *secrets.Service
 	Metrics    *metrics.Metrics
 	Logger     *slog.Logger
 	Now        func() time.Time

@@ -28,7 +28,11 @@ func Main(args []string) int {
 	defer stop()
 	root := NewRoot(os.Stdin, os.Stdout, os.Stderr)
 	root.SetArgs(args)
-	err := root.ExecuteContext(ctx)
+	return exitCode(root.ExecuteContext(ctx), os.Stderr)
+}
+
+// exitCode maps a command error to the process exit code.
+func exitCode(err error, stderr io.Writer) int {
 	if err == nil {
 		return 0
 	}
@@ -36,12 +40,16 @@ func Main(args []string) int {
 	if errors.As(err, &ee) {
 		return ee.code
 	}
-	fmt.Fprintln(os.Stderr, "error:", err)
+	fmt.Fprintln(stderr, "error:", err)
 	return 1
 }
 
-// NewRoot builds the command tree.
+// NewRoot builds the command tree with the process environment.
 func NewRoot(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
+	return newRoot(&env{stdin: stdin, stdout: stdout, stderr: stderr, getenv: os.Getenv, cwd: os.Getwd})
+}
+
+func newRoot(e *env) *cobra.Command {
 	root := &cobra.Command{
 		Use:           "rypt-store",
 		Short:         "Self-hosted secrets manager",
@@ -49,10 +57,25 @@ func NewRoot(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	root.SetIn(stdin)
-	root.SetOut(stdout)
-	root.SetErr(stderr)
-	root.AddCommand(serverCmd())
+	root.SetIn(e.stdin)
+	root.SetOut(e.stdout)
+	root.SetErr(e.stderr)
+	return addCommands(root, e)
+}
+
+// addCommands registers the client commands with the persistent flags.
+func addCommands(root *cobra.Command, e *env) *cobra.Command {
+	g := &globals{}
+	pf := root.PersistentFlags()
+	pf.StringVar(&g.server, "server", "", "server URL (overrides .rypt-store.yaml)")
+	pf.StringVar(&g.tenant, "tenant", "", "tenant slug")
+	pf.StringVar(&g.project, "project", "", "project slug")
+	pf.StringVar(&g.environment, "env", "", "environment slug")
+	pf.StringVar(&g.output, "output", "text", "output format: text or json")
+	pf.StringVar(&g.caFile, "ca-file", "", "PEM file of the CA (or self-signed certificate) to trust")
+	pf.BoolVar(&g.insecure, "insecure", false, "skip TLS verification (testing only)")
+	root.AddCommand(serverCmd(), loginCmd(e, g), logoutCmd(e, g), initCmd(e, g), secretsCmd(e, g),
+		importCmd(e, g), exportCmd(e, g), runCmd(e, g), tokensCmd(e, g), auditCmd(e, g))
 	return root
 }
 

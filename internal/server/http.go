@@ -176,6 +176,8 @@ func clientIP(r *http.Request) string {
 	return host
 }
 
+const maxBodyBytes = 5 << 20
+
 // withMeta puts request metadata, audit request context, and the response
 // writer into the context for the strict handlers.
 func withMeta(next http.Handler) http.Handler {
@@ -183,6 +185,10 @@ func withMeta(next http.Handler) http.Handler {
 		m := api.RequestMeta{IP: clientIP(r), UserAgent: r.UserAgent(), Origin: r.Header.Get("Origin"), Host: r.Host, TLS: r.TLS != nil}
 		if c, err := r.Cookie(authn.SessionCookie); err == nil {
 			m.SessionToken = c.Value
+		}
+		// Bound request bodies: values are at most 64 KiB and imports 4 MiB.
+		if r.Body != nil {
+			r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 		}
 		ctx := api.WithMeta(r.Context(), m)
 		ctx = audit.WithRequestInfo(ctx, audit.RequestInfo{IP: m.IP, UserAgent: m.UserAgent, RequestID: w.Header().Get("X-Request-Id")})

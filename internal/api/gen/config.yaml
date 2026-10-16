@@ -6,5 +6,6 @@ generate:
   std-http-server: true
   strict-server: true
   embedded-spec: true
+  client: true
 output-options:
   skip-prune: true

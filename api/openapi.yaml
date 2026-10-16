@@ -1941,7 +1941,7 @@ components:
         ops: { type: integer }
     KeyMigration:
       type: object
-      required: [id, kind, params, state, projects_total, projects_done, created_at, updated_at]
+      required: [id, kind, params, state, projects_total, projects_done, started_by, created_at, updated_at]
       properties:
         id: { type: string }
         kind: { type: string, enum: [provider, mode, rotate] }

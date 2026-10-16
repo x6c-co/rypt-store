@@ -300,3 +300,34 @@ func (h *Handlers) DeleteEnvironment(ctx context.Context, req gen.DeleteEnvironm
 	}
 	return gen.DeleteEnvironment204Response{}, nil
 }
+
+// ChangeProjectKeyMode starts, or estimates with dry_run, a mode migration
+// of one project (core 5.7).
+func (h *Handlers) ChangeProjectKeyMode(ctx context.Context, req gen.ChangeProjectKeyModeRequestObject) (gen.ChangeProjectKeyModeResponseObject, error) {
+	s, err := h.projectScope(ctx, req.Tenant, req.Project)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.require(authz.ProjectKeyMode); err != nil {
+		return nil, err
+	}
+	if req.Body == nil || !keys.ValidMode(string(req.Body.KeyMode)) {
+		return nil, errInvalid("key_mode", "key_mode must be A, B, or C")
+	}
+	if h.d.Migrations == nil {
+		return nil, problem(501, "not_implemented", "key migrations are not available")
+	}
+	mreq := keys.MigrationRequest{Kind: keys.MigrateMode, TenantID: s.tenant.ID, ProjectID: s.proj.ID, Mode: string(req.Body.KeyMode)}
+	if req.Body.DryRun != nil && *req.Body.DryRun {
+		est, err := h.d.Migrations.Estimate(ctx, mreq)
+		if err != nil {
+			return nil, err
+		}
+		return gen.ChangeProjectKeyMode200JSONResponse(h.estimateJSON(ctx, est)), nil
+	}
+	m, err := h.d.Migrations.Start(ctx, mreq, s.p.ID)
+	if err != nil {
+		return nil, err
+	}
+	return gen.ChangeProjectKeyMode202JSONResponse(migrationJSON(*m)), nil
+}
