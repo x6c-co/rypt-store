@@ -1,0 +1,60 @@
+/* Colour tokens from the rypt.dev brand kit (core 14.2). The theme follows
+   prefers-color-scheme; [data-theme] on <html> is the viewer's override. */
+
+:root {
+  --paper: #f3f2ef;
+  --surface: #ffffff;
+  --ink: #14181f;
+  --ink-2: #4b5058;
+  --rule: #d9d6d0;
+  --seal: #8a2b3a;
+  --brass: #836428;
+  --crit: #c0392b;
+
+  /* Derived tints, kept in the token layer so components never pick raw colours. */
+  --seal-tint: color-mix(in srgb, var(--seal) 10%, var(--surface));
+  --brass-tint: color-mix(in srgb, var(--brass) 12%, var(--surface));
+  --crit-tint: color-mix(in srgb, var(--crit) 10%, var(--surface));
+  --hover: color-mix(in srgb, var(--ink) 5%, transparent);
+  --on-seal: #ffffff;
+  --shadow: 0 8px 28px rgb(20 24 31 / 0.16);
+
+  --font-ui: "Libre Franklin", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --radius: 6px;
+  --gap: 16px;
+  --sidebar: 248px;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #101319;
+    --surface: #181c23;
+    --ink: #eceae6;
+    --ink-2: #aab0b9;
+    --rule: #2a2f38;
+    --seal: #d97f89;
+    --brass: #c9a662;
+    --crit: #e8705f;
+    --on-seal: #101319;
+    --shadow: 0 8px 28px rgb(0 0 0 / 0.5);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper: #101319;
+  --surface: #181c23;
+  --ink: #eceae6;
+  --ink-2: #aab0b9;
+  --rule: #2a2f38;
+  --seal: #d97f89;
+  --brass: #c9a662;
+  --crit: #e8705f;
+  --on-seal: #101319;
+  --shadow: 0 8px 28px rgb(0 0 0 / 0.5);
+  color-scheme: dark;
+}
