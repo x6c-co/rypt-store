@@ -32,6 +32,14 @@ const RQLiteImage = "rqlite/rqlite:10.6.0"
 // the test ends.
 func New(t testing.TB) *rqlite.Store {
 	t.Helper()
+	s, _ := NewWithURL(t)
+	return s
+}
+
+// NewWithURL is New that also returns the node's URL, for tests that need
+// raw SQL access (for example to tamper with the audit log).
+func NewWithURL(t testing.TB) (*rqlite.Store, string) {
+	t.Helper()
 	url := StartRQLite(t)
 	s, err := rqlite.Open(url, "", "")
 	if err != nil {
@@ -43,7 +51,7 @@ func New(t testing.TB) *rqlite.Store {
 	if err := s.Migrate(ctx); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	return s
+	return s, url
 }
 
 // StartRQLite starts a node and returns its HTTP URL.
