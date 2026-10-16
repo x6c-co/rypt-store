@@ -1,0 +1,19 @@
+# Downloaded test tools (make tools)
+/.tools/
+
+# Build output
+/bin/
+/dist/
+
+# Frontend
+/web/node_modules/
+/web/dist/*
+!/web/dist/.gitkeep
+/web/test-results/
+/web/playwright-report/
+
+# Local data and config
+/data/
+/deploy/.env
+*.kek
+.rypt-store.yaml
