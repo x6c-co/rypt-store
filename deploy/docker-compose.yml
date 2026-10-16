@@ -1,0 +1,54 @@
+# rypt-store with one rqlite node (core 13).
+#
+#   cp .env.example .env   # optional: rypt.dev credentials, ACME domain
+#   docker compose up -d
+#   docker compose logs rypt-store   # prints the one-time setup token
+#
+# With no .env this starts a local-provider instance with a self-signed
+# certificate at https://localhost.
+name: rypt-store
+
+services:
+  rqlite:
+    image: rqlite/rqlite:10.6.0
+    restart: unless-stopped
+    volumes:
+      - rqlite-data:/rqlite/file
+    # Port 4001 is not published: only rypt-store talks to the database.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:4001/readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  rypt-store:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: rypt-store:local
+    restart: unless-stopped
+    depends_on:
+      rqlite:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      RYPT_STORE_DATABASE_URL: http://rqlite:4001
+      RYPT_STORE_DATA_DIR: /data
+      RYPT_STORE_SERVER_HTTPS_LISTEN: ":8443"
+      RYPT_STORE_SERVER_HTTP_LISTEN: ":8080"
+      # Prometheus metrics stay inside the container unless you publish them.
+      RYPT_STORE_METRICS_LISTEN: "127.0.0.1:9090"
+    volumes:
+      - rypt-store-data:/data
+      # To use a config file instead of environment variables:
+      # - ./config.yaml:/etc/rypt-store/config.yaml:ro
+    # command: ["server", "--config", "/etc/rypt-store/config.yaml"]
+    ports:
+      - "443:8443"
+      - "80:8080"
+
+volumes:
+  rqlite-data:
+  rypt-store-data:

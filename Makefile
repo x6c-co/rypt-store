@@ -5,7 +5,7 @@ GOOS_ARCH      := $(shell go env GOOS)-$(shell go env GOARCH)
 VERSION        ?= dev
 LDFLAGS        := -s -w -X github.com/x6c-co/rypt-store/internal/version.Version=$(VERSION)
 
-.PHONY: all build web generate test test-race vet vuln tools clean
+.PHONY: all build web generate check-generated test test-race vet vuln e2e docker tools clean
 
 all: build
 
@@ -22,6 +22,10 @@ generate:
 	go generate ./...
 	cd web && npm run generate
 
+## check-generated: fail when generated code is stale (core 9)
+check-generated: generate
+	git diff --exit-code -- internal/api/gen web/src/api/schema.d.ts
+
 ## test: unit and integration tests (integration tests need `make tools` or Docker)
 test:
 	go test ./...
@@ -33,7 +37,15 @@ vet:
 	go vet ./...
 
 vuln:
-	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
+## e2e: Playwright specs against a fresh server (needs `make tools` and Chromium)
+e2e:
+	./scripts/e2e.sh
+
+## docker: build the image
+docker:
+	docker build --build-arg VERSION=$(VERSION) -t rypt-store:$(VERSION) .
 
 ## tools: download rqlited for integration tests into .tools/
 tools: .tools/rqlite/rqlite-v$(RQLITE_VERSION)-$(GOOS_ARCH)/rqlited

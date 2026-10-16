@@ -1,0 +1,62 @@
+# rypt-store configuration (core 12). Environment variables override file
+# values by path: keys.provider becomes RYPT_STORE_KEYS_PROVIDER. Keep secrets
+# (rypt.token, database.password, DNS provider credentials) in environment
+# variables, not in this file.
+data_dir: /data
+
+server:
+  https_listen: ":8443"
+  http_listen: ":8080"        # "" disables the HTTP listener (ACME HTTP-01 and redirects)
+  public_url: "https://secrets.example.com"
+
+database:
+  driver: rqlite
+  url: "http://rqlite:4001"
+  username: ""
+  password: ""                # prefer RYPT_STORE_DATABASE_PASSWORD
+
+tls:
+  mode: ""                    # acme | files | self_signed; empty = acme when domains and email are set
+  domains: ["secrets.example.com"]
+  acme:
+    email: ""
+    ca: ""                    # empty = Let's Encrypt production; any ACME directory URL works
+    challenge: http           # http | tls-alpn | dns
+    dns:
+      provider: ""            # cloudflare | route53 | digitalocean | hetzner | porkbun
+  cert_file: ""
+  key_file: ""
+
+keys:
+  provider: local             # local | rypt
+  default_mode: B             # A | B | C
+  cache_ttl: 15m
+  cache_max_entries: 10000
+  retired_wrap_retention: 168h
+  local:
+    kek_file: /data/local.kek # or RYPT_STORE_LOCAL_KEK (base64)
+
+rypt:
+  token: ""                   # prefer RYPT_STORE_RYPT_TOKEN
+  key_id: ""                  # rypt key UUID from the rypt.dev dashboard
+  outage_policy: fail_closed  # fail_closed | serve_cached
+  max_stale: 24h
+
+auth:
+  require_mfa: true
+  session_idle: 12h
+  session_max: 168h
+  cli_session_max: 720h
+
+secrets:
+  versions_kept: 20
+  deleted_retention: 720h     # soft-deleted secrets purge after 30 days
+
+tokens:
+  max_ttl: 8760h
+
+audit:
+  retention_days: 0           # 0 keeps events forever
+
+metrics:
+  listen: "127.0.0.1:9090"

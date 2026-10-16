@@ -107,3 +107,14 @@ func TestEmptyFile(t *testing.T) {
 		t.Fatalf("empty file: %v", err)
 	}
 }
+
+// TestExampleConfig keeps deploy/config.example.yaml loadable.
+func TestExampleConfig(t *testing.T) {
+	c, err := Load(filepath.Join("..", "..", "deploy", "config.example.yaml"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Keys.Provider != "local" || c.Secrets.DeletedRetention.D() != 720*time.Hour || c.TLS.Domains[0] != "secrets.example.com" {
+		t.Fatalf("example config = %+v", c)
+	}
+}
