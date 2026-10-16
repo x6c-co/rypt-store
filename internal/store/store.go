@@ -176,8 +176,8 @@ type ProjectStore interface {
 	GetProject(ctx context.Context, tenantID, id string) (*Project, error)
 	GetProjectBySlug(ctx context.Context, tenantID, slug string) (*Project, error)
 	ListProjects(ctx context.Context, tenantID string) ([]Project, error)
-	// ListAllProjects lists live projects of every tenant in ID order, after
-	// the cursor ID when it is not empty.
+	// ListAllProjects lists every project of every tenant, deleted ones
+	// included, in ID order after the cursor ID (for migrations).
 	ListAllProjects(ctx context.Context, afterID string) ([]Project, error)
 	UpdateProject(ctx context.Context, tenantID, id, name, slug string, ev *AuditEvent) error
 	DeleteProject(ctx context.Context, tenantID, id string, at time.Time, ev *AuditEvent) error

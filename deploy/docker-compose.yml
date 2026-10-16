@@ -5,7 +5,8 @@
 #   docker compose logs rypt-store   # prints the one-time setup token
 #
 # With no .env this starts a local-provider instance with a self-signed
-# certificate at https://localhost.
+# certificate at https://localhost. Needs Docker Compose 2.24 or later (for
+# the optional env_file).
 name: rypt-store
 
 services:

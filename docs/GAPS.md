@@ -24,6 +24,17 @@ credentials.
 - **testcontainers (core 16).** Integration tests start a local `rqlited`
   (`make tools`). The testcontainers path is implemented but did not run.
 
+## Not built
+
+- **Tenant deletion.** Core 7.5 lists "delete tenant" under `tenant.own`, but
+  core 9 defines no endpoint for it, and none was built.
+- **If-Match on create.** Feature 01 3.1 says the expected version is 0 for a
+  create. `POST .../secrets` takes no If-Match; a create of an existing name is
+  409 through the unique index instead.
+- **Pagination.** Core 9 describes cursor pagination. The audit lists and the
+  secret list are paginated; members, invitations, projects, environments,
+  and tokens return complete lists, which stay small.
+
 ## rypt.dev module (`github.com/x6c-co/rypt` v0.1.0)
 
 Core 5.3 asks the adapter to map Wrap, Unwrap, and Rewrap to the module's

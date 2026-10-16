@@ -126,6 +126,11 @@ func TestProviderMigration(t *testing.T) {
 	e := newEnv(t)
 	local := e.service(t, "local", nil)
 	projects := []seeded{e.seed(t, local, ModeA, 2), e.seed(t, local, ModeB, 2), e.seed(t, local, ModeC, 3)}
+	// A deleted project's wraps must move too, or local could never be removed.
+	gone := e.seed(t, local, ModeC, 1)
+	if err := e.st.DeleteProject(ctx, gone.p.TenantID, gone.p.ID, time.Now(), nil); err != nil {
+		t.Fatal(err)
+	}
 	totp, err := local.EncryptTOTP(ctx, "u1", []byte("SECRET"))
 	if err != nil {
 		t.Fatal(err)
@@ -144,7 +149,7 @@ func TestProviderMigration(t *testing.T) {
 	}
 	// IK + RK, and per project: A nothing, B its PK, C its 3 DEKs; each
 	// costs a wrap and a verifying unwrap on rypt.
-	if est.InstanceOps != 4 || est.TotalOps != 4+2+6 || len(est.Projects) != 2 {
+	if est.InstanceOps != 4 || est.TotalOps != 4+2+6+2 || len(est.Projects) != 3 {
 		t.Fatalf("estimate = %+v", est)
 	}
 	e.rypt.Reset()
@@ -153,7 +158,7 @@ func TestProviderMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := waitMigration(t, m, e.st, mig.ID)
-	if got.State != store.MigrationSucceeded || got.ProjectsDone != 3 {
+	if got.State != store.MigrationSucceeded || got.ProjectsDone != 4 {
 		t.Fatalf("migration = %+v", got)
 	}
 	if spent := e.rypt.Total(); spent != est.TotalOps {

@@ -183,14 +183,24 @@ func (h *Handlers) loginOK(p *authz.Principal) gen.LoginResult {
 	return gen.LoginResult{Status: gen.LoginResultStatusOk, User: ptr(userJSON(p.User))}
 }
 
-// satisfy marks the current session MFA-satisfied with its full lifetime.
+// satisfy marks the current session MFA-satisfied with its full lifetime
+// and re-issues the web cookie to match.
 func (h *Handlers) satisfy(ctx context.Context, p *authz.Principal, method string) error {
 	expires := p.Session.CreatedAt.Add(h.d.Sessions.Max)
-	return h.record(ctx, audit.Event{ChainID: store.InstanceChain, ActorKind: audit.ActorUser, ActorID: p.ID,
+	err := h.record(ctx, audit.Event{ChainID: store.InstanceChain, ActorKind: audit.ActorUser, ActorID: p.ID,
 		Action: "auth.mfa.verify", TargetKind: "user", TargetID: p.ID, Metadata: map[string]any{"method": method, "session": p.Session.PublicID}},
 		func(ev *store.AuditEvent) error {
 			return h.d.Store.SatisfySessionMFA(ctx, p.Session.IDHash, expires, ev)
 		})
+	if err != nil {
+		return err
+	}
+	// The cookie was set with the short pre-MFA expiry; re-issue it with the
+	// session's full lifetime.
+	if tok := MetaFrom(ctx).SessionToken; p.Session.Kind == store.SessionWeb && tok != "" {
+		h.setSessionCookie(ctx, tok, expires)
+	}
+	return nil
 }
 
 func (h *Handlers) mfaFailed(ctx context.Context, p *authz.Principal, method string) error {

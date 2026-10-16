@@ -253,7 +253,9 @@ func (s *Store) ListProjects(ctx context.Context, tenantID string) ([]store.Proj
 }
 
 func (s *Store) ListAllProjects(ctx context.Context, afterID string) ([]store.Project, error) {
-	return s.listProjects(ctx, "SELECT "+projectCols+" FROM projects WHERE deleted_at IS NULL AND id > ? ORDER BY id", afterID)
+	// Deleted projects are included: their wraps must move too, or the old
+	// provider could never be removed (core 5.7).
+	return s.listProjects(ctx, "SELECT "+projectCols+" FROM projects WHERE id > ? ORDER BY id", afterID)
 }
 
 func (s *Store) UpdateProject(ctx context.Context, tenantID, id, name, slug string, ev *store.AuditEvent) error {

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/x6c-co/rypt-store/internal/config"
 	"github.com/x6c-co/rypt-store/internal/server/servertest"
@@ -80,7 +81,18 @@ func TestLoginMFAAndSessions(t *testing.T) {
 	if r := c.Post("/api/v1/me/mfa/totp", nil); r.Status != 403 {
 		t.Fatalf("enroll while pending: %d %s", r.Status, r.Body)
 	}
-	c.Post("/api/v1/auth/mfa/totp", map[string]any{"code": e.TOTPCode(a.TOTPSecret)}).Must(t, 200)
+	r = c.Post("/api/v1/auth/mfa/totp", map[string]any{"code": e.TOTPCode(a.TOTPSecret)}).Must(t, 200)
+	// The cookie set at the password step expires with the 10-minute pre-MFA
+	// session; passing MFA re-issues it with the full session lifetime.
+	var cookie *http.Cookie
+	for _, ck := range (&http.Response{Header: r.Header}).Cookies() {
+		if ck.Name == "__Host-rypt_store_session" {
+			cookie = ck
+		}
+	}
+	if cookie == nil || time.Until(cookie.Expires) < 6*24*time.Hour {
+		t.Fatalf("session cookie after MFA = %+v", cookie)
+	}
 	if r := c.Get("/api/v1/me").Map(); r["session"].(map[string]any)["mfa_satisfied"] != true {
 		t.Fatalf("session after mfa = %v", r["session"])
 	}

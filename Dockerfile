@@ -10,7 +10,9 @@ COPY api/openapi.yaml /src/api/openapi.yaml
 COPY web/ ./
 RUN npm run build
 
-FROM golang:1.27-alpine AS build
+# Pin the patch release: official golang images set GOTOOLCHAIN=local, so the
+# toolchain line in go.mod would not upgrade the standard library here.
+FROM golang:1.27.2-alpine AS build
 WORKDIR /src
 ENV CGO_ENABLED=0
 COPY go.mod go.sum ./
