@@ -2,7 +2,7 @@ module github.com/x6c-co/rypt-store
 
 go 1.27.0
 
-toolchain go1.27.2
+toolchain go1.27.3
 
 require (
 	github.com/caddyserver/certmagic v0.25.6
