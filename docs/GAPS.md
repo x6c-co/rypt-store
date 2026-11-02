@@ -35,7 +35,7 @@ credentials.
   secret list are paginated; members, invitations, projects, environments,
   and tokens return complete lists, which stay small.
 
-## rypt.dev module (`github.com/x6c-co/rypt` v0.1.0)
+## rypt.dev module (`github.com/x6c-co/rypt` v0.2.0)
 
 Core 5.3 asks the adapter to map Wrap, Unwrap, and Rewrap to the module's
 envelope operations, to pass AAD, and to record request IDs. The module accepts

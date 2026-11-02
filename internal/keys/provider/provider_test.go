@@ -127,7 +127,7 @@ func newRyptForTest(t *testing.T) (*Rypt, *fakeRyptAPI) {
 	srv := httptest.NewServer(api)
 	t.Cleanup(srv.Close)
 	r, err := NewRypt(RyptOptions{Token: "ry_test_token", KeyID: "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0",
-		BaseURL: strings.Replace(srv.URL, "127.0.0.1", "localhost", 1), UserAgent: "rypt-store/test"})
+		BaseURL: srv.URL, UserAgent: "rypt-store/test"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,12 +193,31 @@ func TestRyptErrorClassification(t *testing.T) {
 		}
 	}
 	// A transport failure is an outage.
-	r, err := NewRypt(RyptOptions{Token: "ry_x", KeyID: "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0", BaseURL: "http://localhost:1"})
+	r, err := NewRypt(RyptOptions{Token: "ry_x", KeyID: "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0", BaseURL: "http://127.0.0.1:1"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = r.Wrap(ctx, bytes.Repeat([]byte{1}, 32), nil)
 	if KindOf(err) != Outage {
 		t.Fatalf("transport kind = %v (%v)", KindOf(err), err)
+	}
+}
+
+// TestRyptRefusesPlainHTTPToLocalhost records that rypt-store relies on the
+// module (from v0.2.0) to refuse plain http to the name localhost. A name is
+// looked up, and DNS could answer with another machine, which would then
+// receive the token in clear text. Plain http to the addresses 127.0.0.1 and
+// ::1 is still allowed, and so is https to localhost.
+func TestRyptRefusesPlainHTTPToLocalhost(t *testing.T) {
+	const keyID = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"
+	for _, u := range []string{"http://localhost:1", "http://LOCALHOST:1"} {
+		if _, err := NewRypt(RyptOptions{Token: "ry_x", KeyID: keyID, BaseURL: u}); err == nil {
+			t.Errorf("NewRypt(%q) succeeded, want an error", u)
+		}
+	}
+	for _, u := range []string{"http://127.0.0.1:1", "http://[::1]:1", "https://localhost:1"} {
+		if _, err := NewRypt(RyptOptions{Token: "ry_x", KeyID: keyID, BaseURL: u}); err != nil {
+			t.Errorf("NewRypt(%q) = %v, want no error", u, err)
+		}
 	}
 }

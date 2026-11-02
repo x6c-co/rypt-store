@@ -16,7 +16,7 @@ RUN npm run build
 
 # Pin the patch release: official golang images set GOTOOLCHAIN=local, so the
 # toolchain line in go.mod would not upgrade the standard library here.
-FROM --platform=$BUILDPLATFORM golang:1.27.2-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine AS build
 WORKDIR /src
 ENV CGO_ENABLED=0
 COPY go.mod go.sum ./
