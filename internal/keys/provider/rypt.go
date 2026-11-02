@@ -16,7 +16,7 @@ import (
 //	Rewrap -> Unwrap, then Wrap under the configured key
 //
 // The module accepts AAD on wrap and unwrap, so the binding of core 5.5
-// holds. Known gaps in module v0.1.0, recorded in docs/GAPS.md:
+// holds. Known gaps in module v0.2.0, recorded in docs/GAPS.md:
 //
 //   - rypt.Client.Rewrap is documented for Encrypt ciphertexts only, not for
 //     wrapped data keys, so Rewrap here costs two metered operations and the

@@ -20,7 +20,7 @@ require (
 	github.com/rqlite/rqlite-go-http v0.0.0-20261015135318-559f1a735b56
 	github.com/spf13/cobra v1.10.2
 	github.com/testcontainers/testcontainers-go v0.44.0
-	github.com/x6c-co/rypt v0.1.0
+	github.com/x6c-co/rypt v0.2.0
 	go.uber.org/zap v1.28.0
 	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/crypto v0.58.0
